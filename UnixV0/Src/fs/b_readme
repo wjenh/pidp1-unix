@@ -2,7 +2,7 @@ Here is how to compile and run hello.b in the dmr directory.
 Log in as dmr/dmr.
 Lines starting with @ are the Unix prompt, type what is given.
 Lines with no leading @ are output you should see.
-The assembly step takes a while, it assembles the entore B runtime.
+The assembly step takes a while, it assembles the entire B runtime.
 
 If this is the first B program you are compiling:
 @ ln system bop.s

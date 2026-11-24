@@ -234,6 +234,7 @@ w_10255,dzm x_lnk
         rir 1s
         dio x_lnk
         lio x_io
+        add u_d1                        // -(2n+1) to -2n: the rotate brought in 0, not the sign
 w_10256,dac u_c1
 w_10257,lac u_tbufp
 w_10260,dac u_tal1
