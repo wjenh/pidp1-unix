@@ -1,0 +1,272 @@
+// as1gi.ac holds what as1's generators, as1g, as1d, as1h and as1e, share.
+// That is a word's items, and its record written to the stream with its
+// shape in its flags.
+// A record is, for a word with a skip, the skip as an item and the inverted
+// skip's word, then the items before the skip and those after it; otherwise
+// the items.
+// The shape is in the flags' low bits (an entry keeps its rank there).
+// It is FSKIP, the items before in 0700 and those after in 077; or the count
+// of items.
+
+// An item with no operand.
+// Entry: AC = its word.
+// AC and IO are clobbered.
+// Called via jda.
+put,    0
+        dap putx
+        lio [0]
+        jmp pt1
+
+// An item.
+// A word given more than MAXITEM items is reported, and the item dropped.
+// Entry: AC = its word, IO = its operand, itc = the offset or value that
+// follows the operand.
+// AC and IO are clobbered.
+// Called via jda.
+putb,   0
+        dap putx
+        lac putb
+        dac put
+pt1,
+        lac nit
+        sub [MAXITEM]
+        spa
+        jmp pt2
+        lac k
+        lio [M_LONG]
+        jda report
+        jmp putx
+pt2,
+        lac nit
+        add [ITEMA]
+        dac pp
+        lac put
+        dac i pp
+        lac nit
+        add [ITEMB]
+        dac pp
+        dio i pp
+        lac nit
+        add [ITEMC]
+        dac pp
+        lac itc
+        dac i pp
+        idx nit
+putx,   jmp .
+
+// An item whose operand is the one oadr, ob and oc hold.
+// Entry: AC = the word, without its address.
+// AC and IO are clobbered.
+// Called via jda.
+putop,  0
+        dap putopx
+        lac oc
+        dac itc
+        lac putop
+        ior oadr
+        lio ob
+        jda putb
+putopx, jmp .
+
+// An item whose operand is a literal.
+// Entry: AC = the word, IO = the literal's value, pone set for the text [1].
+// Exit: pone is cleared.
+// AC and IO are clobbered.
+// Called via jda.
+putl,   0
+        dap putlx
+        dio itc
+        lac pone
+        ior [TLIT]
+        dac plb
+        dzm pone
+        lac putl
+        lio plb
+        jda putb
+putlx,  jmp .
+
+// The record of word k to the stream, and its shape to its flags.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+emit,   0
+        dap emitx
+        lac hask
+        sza i
+        jmp em2
+        lac ska
+        jda swr
+        lac skb
+        jda swr
+        lac skb
+        jda hasc
+        sza i
+        jmp em1
+        lac skc
+        jda swr
+em1,
+        lac ski
+        jda swr
+em2,
+        dzm emj
+em3,
+        lac emj
+        sad nit
+        jmp em6
+        add [ITEMA]
+        dac emp
+        lac i emp
+        jda swr
+        lac emj
+        add [ITEMB]
+        dac emp
+        lac i emp
+        dac emb
+        jda swr
+        lac emb
+        jda hasc
+        sza i
+        jmp em5
+        lac emj
+        add [ITEMC]
+        dac emp
+        lac i emp
+        jda swr
+em5,
+        idx emj
+        jmp em3
+
+        // The shape, unless an entry's rank is there.
+em6,
+        lac k
+        jda getf
+        and [FENT]
+        sza
+        jmp emitx
+        lac hask
+        sza i
+        jmp em7
+        lac npre
+        sal 6s
+        ior [FSKIP]
+        dac ems
+        lac nit
+        sub npre
+        ior ems
+        jmp em8
+em7,
+        lac nit
+em8,
+        dac ems
+        lac i fptr
+        and [0775000]
+        ior ems
+        dac i fptr
+emitx,  jmp .
+
+// 1 when an operand is followed by an offset or a value, as TBASE and TLIT
+// are.
+// Entry: AC = the operand.
+// Exit: AC = 1 or 0.
+// IO is preserved.
+// Called via jda.
+hasc,   0
+        dap hascx
+        lac hasc
+        and [0700000]
+        sad [TBASE]
+        jmp hc1
+        sad [TLIT]
+        jmp hc1
+        cla
+        jmp hascx
+hc1,
+        lac [1]
+hascx,  jmp .
+
+// Stream n begun, to be written through fdrw, as1t's, from its place.
+// Entry: AC = n.
+// AC and IO are clobbered.
+// Called via jda.
+sopen,  0
+        dap sopenx
+        lac sopen
+        add [sbase]
+        dap so1
+so1,    lac 0
+        dac sosk
+        lac fdtw
+        dac fdrw
+        cal SYSSEEK
+sosk,   0
+        0
+        dzm swn
+sopenx, jmp .
+
+// Stream n ended.
+// Its last words are written, and the next stream's place is set at the
+// block after them.
+// Entry: AC = n.
+// AC and IO are clobbered.
+// Called via jda.
+sclose, 0
+        dap sclosex
+        jda sflush
+        lac sclose
+        add [sbase+1]
+        dap sc2
+        sub [1]
+        dap sc1
+sc1,    lac 0
+        add swn
+        add [077]
+        and [0777700]
+sc2,    dac 0
+sclosex, jmp .
+
+// The PDP-1 address of PDP-7 word i (its address less 010000) as the operand
+// in oadr, ob and oc.
+// A word below the program gives a number, any other the word's PDP-1
+// address.
+// Entry: AC = i.
+// AC is clobbered; IO is preserved.
+// Called via jda.
+mapa,   0
+        dap mapax
+        dzm oc
+        lac mapa
+        spa
+        jmp ma1
+        ior [TMAP]
+        dac ob
+        dzm oadr
+        jmp mapax
+ma1,
+        add [010000]
+        and [07777]
+        dac oadr
+        dzm ob
+mapax,  jmp .
+
+// The words the generators share.
+k,      0                           // the word
+kf,     0                           // its flags
+nit,    0                           // its items
+hask,   0                           // it has a skip, with
+npre,   0                           // the items before it,
+ska,    0                           // the skip,
+skb,    0                           // its operand,
+skc,    0                           // and what follows that,
+ski,    0                           // the inverted skip
+oadr,   0                           // an operand, an address,
+ob,     0                           // a kind and word,
+oc,     0                           // and what follows
+itc,    0
+pone,   0
+plb,    0
+pp,     0
+emj,    0
+emp,    0
+emb,    0
+ems,    0
+

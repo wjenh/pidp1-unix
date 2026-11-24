@@ -1,0 +1,80 @@
+mv
+// Translated by as7am1 from the PDP-7 source other/wktmv.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp u_main
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0110/
+u_main, lac i 07777
+w_10001,sad u_d8
+w_10002,jmp u_nofiles
+w_10003,lac 07777
+w_10004,add u_d5
+w_10005,dac u_name1
+w_10006,add u_d4
+w_10007,dac u_name2
+w_10010,cal 015
+u_name1,0000000
+u_name2,0000000
+w_10013,sma i
+w_10014,jmp u_badfile
+w_10015,cal 016
+u_nofiles,lac u_d1
+w_10017,cal 05
+w_10020,w_10023
+w_10021,0000005
+w_10022,cal 016
+w_10023,0164167
+w_10024,0157040
+w_10025,0146151
+w_10026,0154145
+w_10027,0163012
+u_badfile,lac u_name1
+w_10031,dac w_10034
+w_10032,lac u_d1
+w_10033,cal 05
+w_10034,0000000
+w_10035,0000004
+w_10036,lac u_d1
+w_10037,cal 05
+w_10040,w_10043
+w_10041,0000002
+w_10042,cal 016
+w_10043,0000040
+w_10044,0077012
+u_d1,   0000001
+u_d4,   0000004
+u_d5,   0000005
+u_d8,   0000010
+x_end,
+0110/
+        constants
+start 020000

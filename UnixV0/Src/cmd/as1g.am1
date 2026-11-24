@@ -1,0 +1,495 @@
+as1g
+// as1g is as1's fifth overlay, the fourth in the as1x file.
+// It finds the routines' ranks, then writes the PDP-1 words of the memory
+// references, with their reports, as records to the first stream in as1t,
+// which it makes.
+// Literals and addresses are left as operands for the output.
+// See as1.am1, and translate.c's translateMemref.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+OV/
+// The ranks, then the memory references in order; then the data's generator.
+        jda tmpmk
+        jda ranks
+        lac [SMEM]
+        jda sopen
+        dzm k
+g1,
+        lac lastk
+        sub k
+        spa                         // skip while k is not past the last word stored
+        jmp g9
+        lac k
+        jda getf
+        dac kf
+        and [KMASK|CMASK]
+        sas [KCODE|CMEM]
+        jmp g8
+        dzm nit
+        dzm hask
+        dzm pone
+        lac k
+        jda getv
+        dac kv
+        jmp gmem
+gend,
+        jda emit
+g8,
+        idx k
+        jmp g1
+g9,
+        lac [SMEM]
+        jda sclose
+        lac [OVD]
+        jmp ovload
+
+// Each routine's rank, its r_ word's place after 0110, into its entry's
+// flags, and the count into nent.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+ranks,  0
+        dap ranksx
+        dzm nent
+        dzm k
+rk1,
+        lac k
+        sub nw
+        sma
+        jmp ranksx
+        lac k
+        jda getf
+        and [FENT]
+        sza i
+        jmp rk2
+        lac i fptr
+        and [0777000]
+        ior nent
+        dac i fptr
+        idx nent
+rk2,
+        idx k
+        jmp rk1
+ranksx, jmp .
+
+// A memory reference, by translate.c's memory reference rules.
+// Entered by jmp from the loop above with k, kf and kv set; it leaves by jmp
+// gend.
+gmem,
+        lac kv
+        and [0740000]
+        dac op
+        lac kv
+        and [017777]
+        dac t
+        sub [010000]
+        dac ti                      // the target's index, negative below
+        dzm ind
+        lac kv
+        and [020000]
+        sza
+        idx ind
+        dzm rel
+        lac kf
+        and [FREL]
+        sza
+        idx rel
+
+        // An auto-index register is 010-017, indirect, not relocatable.
+        dzm aut
+        lac rel
+        sza
+        jmp gm1
+        lac ind
+        sza i
+        jmp gm1
+        lac t
+        and [017770]
+        sad [010]
+        idx aut
+gm1,
+        dzm ent
+        lac rel
+        sza i
+        jmp gm2
+        lac ti
+        jda isent
+        dac ent
+        sza i
+        jmp gm2
+        lac ti
+        jda getf
+        and [0777]
+        add [0110]
+        dac ret                     // the entry's r_ word
+gm2,
+        lac kf
+        and [0100]                  // AC live after
+        dac lvac
+
+        // The operand.
+        dzm oadr
+        dzm ob
+        dzm oc
+        lac rel
+        sza i
+        jmp gm5
+        lac ti
+        sma
+        jmp gm3
+        lac k
+        lio [M_OUTSD]
+        jda report
+gm3,
+        lac op
+        sad [OJMP]
+        jmp gm4
+        sad [OJMS]
+        jmp gm4
+        sad [OXCT]
+        jmp gm4
+        lac ti
+        jda dref
+        lac ind
+        sza
+        jmp gm6
+        lac ti
+        spa
+        jmp gm6
+        sub nk
+        sma
+        jmp gm6
+        lac ti
+        jda kind
+        sas [KCODE]
+        jmp gm6
+        lac k
+        lio [M_CODAT]
+        jda report
+        jmp gm6
+gm4,
+        lac ti
+        jda mapa
+        jmp gm6
+
+        // A number in the program is an offset from its start; one below it
+        // is kept.
+gm5,
+        lac ti
+        spa
+        jmp gm5b
+        dac oadr
+        sza i
+        jmp gm5a
+        sub nk
+        sma
+        jmp gm5a
+        lac k
+        lio [M_NUMAD]
+        jda report
+gm5a,
+        lio [0]
+        lac k
+        jda getr
+        and [RSPAN]
+        sza i
+        jmp gm6
+        lac k
+        lio [M_DIFFL]
+        jda report
+        jmp gm6
+gm5b,
+        lac t
+        dac oadr
+        and [017770]
+        sad [010]
+        jmp gm6
+        lac k
+        lio [M_LOWM]
+        jda report
+gm6,
+        lac k
+        jda cspan
+        lac ind
+        sza i
+        jmp gm7
+        lac ent
+        sza i
+        jmp gm7
+        lac ret                     // through an entry, its r_ word
+        dac oadr
+        dzm ob
+        dzm oc
+gm7,
+        lac op
+        sad [OJMS]
+        jmp gjms
+        sad [OJMP]
+        jmp gjmp
+        sad [OISZ]
+        jmp gisz
+        sad [OSAD]
+        jmp gsad
+        jmp gmn
+
+gjms,
+        lac ind
+        sza i
+        jmp gj1
+        lac k
+        lio [M_JMSP]
+        jda report
+gj1,
+        lac [P_JDA]
+        jda putop
+        jmp gend
+
+gjmp,
+        lac ind
+        sza i
+        jmp gp1
+        lac ent
+        sza i
+        jmp gp1
+        lac [P_JMP]
+        jda putop
+        jmp gend
+gp1,
+        lac aut
+        sza i
+        jmp gp2
+        lac k
+        lio [M_JMPA]
+        jda report
+gp2,
+        lac [P_JMP]
+        jda pind
+        jmp gend
+
+        // An isz of a return word is one more for the skip return; a count
+        // keeps its skip; any other isz is an increment.
+gisz,
+        lac ent
+        sza i
+        jmp gz2
+        lac ind
+        sza
+        jmp gz2
+        jda svac
+        lac ret
+        ior [P_IDX]
+        jda put
+        jda rsac
+        jmp gend
+gz2,
+        lac aut
+        sza i
+        jmp gz3
+        lac k
+        lio [M_ISZA]
+        jda report
+gz3,
+        jda svac
+        lac [P_IDX]
+        jda pind
+        lac kf
+        and [FCNT]
+        sza i
+        jmp gz4
+        idx hask
+        lac nit
+        dac npre
+        lac [P_SZA]
+        dac ska
+        lac [P_SZA|P_I]
+        dac ski
+        dzm skb
+        dzm skc
+gz4,
+        jda rsac
+        jmp gend
+
+        // sad is a skip, sad and sas.
+gsad,
+        idx hask
+        lac aut
+        sza i
+        jmp gs1
+        lac [P_DAC|X_AC]
+        jda put
+        lac [P_IDX]
+        jda putop
+        lac [P_LAC|X_AC]
+        jda put
+        jmp gs1a
+gs1,
+        lac ind
+        sza i
+        jmp gs2
+gs1a,
+        lac [P_SAD|P_I]
+        dac ska
+        lac [P_SAS|P_I]
+        dac ski
+        jmp gs3
+gs2,
+        lac [P_SAD]
+        dac ska
+        lac [P_SAS]
+        dac ski
+gs3,
+        lac ska
+        ior oadr
+        dac ska
+        lac ski
+        ior oadr
+        dac ski
+        lac ob
+        dac skb
+        lac oc
+        dac skc
+        lac nit
+        dac npre
+        jmp gend
+
+        // The rest are one word, the opcode from the table.
+gmn,
+        lac op
+        ral 4s
+        add [mntab]
+        dap gn0
+gn0,    lac 0
+        dac mn
+        lac op
+        sas [OTAD]
+        jmp gn1
+        lac kf
+        and [0400]                  // the link live after
+        sza i
+        jmp gn1
+        lac k
+        lio [M_TADL]
+        jda report
+gn1,
+        lac ent
+        sza i
+        jmp gn2
+        lac ind
+        sza
+        jmp gn2
+        lac k
+        lio [M_RETV]
+        jda report
+gn2,
+        lac aut
+        sza i
+        jmp gn5
+        lac op
+        sas [OXCT]
+        jmp gn3
+        lac k
+        lio [M_XCTA]
+        jda report
+gn3,
+        lac op
+        sad [OLAC]
+        jmp gn3a
+        sas [ODZM]
+        jmp gn4
+        lac lvac
+        sza
+        jmp gn4
+gn3a,
+        lac [P_IDX]
+        jda putop
+        jmp gn4a
+gn4,
+        lac [P_DAC|X_AC]
+        jda put
+        lac [P_IDX]
+        jda putop
+        lac [P_LAC|X_AC]
+        jda put
+gn4a,
+        lac mn
+        ior [P_I]
+        jda putop
+        jmp gend
+gn5,
+        lac ind
+        sza i
+        jmp gn6
+        lac ent
+        sza i
+        jmp gn6
+        lac mn
+        ior [P_I]
+        jda putop
+        jmp gend
+gn6,
+        lac mn
+        jda pind
+        jmp gend
+
+// svac puts an item saving AC before an idx, and rsac one restoring it
+// after, when AC is live after the word (lvac).
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+svac,   0
+        dap svacx
+        lac lvac
+        sza i
+        jmp svacx
+        lac [P_DAC|X_AC]
+        jda put
+svacx,  jmp .
+rsac,   0
+        dap rsacx
+        lac lvac
+        sza i
+        jmp rsacx
+        lac [P_LAC|X_AC]
+        jda put
+rsacx,  jmp .
+
+// putop with the indirect bit added when the PDP-7 word had it (ind).
+// Entry: AC = the word.
+// AC and IO are clobbered.
+// Called via jda.
+pind,   0
+        dap pindx
+        lac ind
+        sza i
+        jmp pi1
+        lac pind
+        ior [P_I]
+        dac pind
+pi1,
+        lac pind
+        jda putop
+pindx,  jmp .
+
+#include "as1gr.ac"
+#include "as1gi.ac"
+
+// PDP-1 opcodes by PDP-7 opcode, for the memory references with one word.
+mntab,  P_AND; P_DAC; P_AND; P_DZM; P_LAC; P_XOR; P_ADD; P_ADD
+        P_XCT; P_AND; P_AND; P_AND; P_AND; P_AND; P_AND; P_AND
+
+op,     0
+t,      0
+ti,     0
+ind,    0
+rel,    0
+aut,    0
+ent,    0
+ret,    0
+lvac,   0
+mn,     0
+
+        constants
+start 020000

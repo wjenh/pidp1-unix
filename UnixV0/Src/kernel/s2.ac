@@ -1,0 +1,538 @@
+// The kernel's second part, after 1970's s2.s, with the file system calls
+// and the calls on the process's state.
+// Bank 0, the window open.
+// Needs unix.ah.
+// A user address is 12 bits in the caller's bank, made a 16-bit pointer by
+// uptr.
+// 1970's 010000 to 017777 is 0 to 07777 here.
+
+// sys status; dir; name (s2.s:8-27).
+// Entry: AC = the caller's buffer, 13 words.
+// The buffer gets the i-node of name in the directory dir of the current
+// directory, then its i-number.
+sysStatus,
+        jda arg
+        dac stDir
+        jda arg
+        dac stNam
+        lac stDir
+        jda uptr
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp error
+        dac stI
+        lac stNam
+        jda uptr
+        dac nmPtr
+        lac stI
+        jda namei
+        jmp error
+        jda iget
+// the buffer, all 13 words in the caller's bank (1970's 010000 to 017762)
+        lac uAc
+        and [07777]
+        dac stI
+        sub [07763]
+        sma                 // skip if it fits
+        jmp error
+        lac stI
+        jda uptr
+        dac cpDst
+        lac [inode]
+        dac cpSrc
+        law INOSZ
+        jda copy
+        lac dI              // the i-number, from the entry namei found
+        dac i cpDst
+        jmp okexit
+
+// sys chmod; name (s2.s:43-53).
+// Entry: AC = the new permission bits.
+sysChmod,
+        jda isown
+        lac uAc
+        and [IMODE]
+        dac stI
+        lac iFlags
+        and [0777777-IMODE]
+        ior stI
+        dac iFlags
+        jda iput
+        jmp okexit
+
+// sys chown; name (s2.s:55-60).
+// Entry: AC = the new owner.
+sysChown,
+        jda isown
+        lac uAc
+        dac iUid
+        jda iput
+        jmp okexit
+
+// sys getuid (s2.s:62-65).
+// Exit: AC = the user id.
+sysGetuid,
+        lac uUid
+        dac uAc
+        jmp sysexit
+
+// sys seek; offset; whence (s2.s:67-90).
+// Entry: AC = the file descriptor.
+// Exit: AC = the new offset.
+// Open for writing, a seek past the end makes the file that long.
+// Open for reading, the offset stops at the end.
+sysSeek,
+        jda seektell
+        add uBase
+        spa
+        jmp error
+        dac skPos
+        lac fFlags
+        and [FWRITE]
+        sza i               // skip if open for writing
+        jmp sk1
+        lac iSize
+        sub skPos
+        sma                 // skip if past the end
+        jmp sk2
+        lac skPos
+        jda dacisize
+        jmp sk2
+sk1,    lac iSize
+        sub skPos
+        sma                 // skip if past the end
+        jmp sk2
+        lac iSize
+        dac skPos
+sk2,    lac skPos
+        dac fBadd
+        dac uAc
+        jda fput
+        jmp sysexit
+
+// sys tell; offset; whence (s2.s:92-98).
+// Entry: AC = the file descriptor.
+// Exit: AC = offset less the place whence names, as 1970 computed it.
+sysTell,
+        jda seektell
+        dac skPos
+        lac uBase
+        sub skPos
+        dac uAc
+        jmp sysexit
+
+// sys link; dir; name; new (s2.s:100-135).
+// Makes a new entry new in the current directory for the file name in the
+// directory dir of dd.
+sysLink,
+        jda arg
+        dac lkA
+        jda arg
+        dac lkB
+        jda arg
+        dac lkC
+        lac lkA
+        jda uptr
+        dac nmPtr
+        law IDD
+        jda namei
+        jmp error
+        dac lkT
+        lac lkB
+        jda uptr
+        dac nmPtr
+        lac lkT
+        jda namei
+        jmp error
+        dac uBase           // the file's i-number
+        lac lkC
+        jda uptr
+        dac cpSrc
+        lac [name]
+        dac cpDst
+        law NAMEW
+        jda copy
+        lac [name]
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp lk1
+        jmp error           // new is there already
+lk1,    law FWRITE          // write access to the current directory
+        dac mode
+        jda access
+        jda dslot
+        lac uBase
+        jda iget
+        lac ii
+        dac dI
+        lac [name]
+        dac cpSrc
+        lac [dName]
+        dac cpDst
+        law NAMEW
+        jda copy
+        lac iUniq
+        dac dUniq
+        lac iNlks           // one link more, the count being kept negative
+        sub [1]
+        dac iNlks
+        jda iput
+        jda dput
+        jmp okexit
+
+// sys unlink; name (s2.s:137-153).
+// Removes the entry name in the current directory, and the file with its
+// last link.
+// AC is returned unchanged.
+sysUnlink,
+        jda argname
+        dac uBase
+        law FWRITE
+        dac mode
+        jda access
+        dzm dI
+        jda dput
+        lac uBase
+        jda iget
+        isp iNlks           // skip when the count reaches +0, no links left
+        jmp ul1
+        jda itrunc
+        dzm iFlags
+ul1,    jda iput
+        jmp sysexit
+
+// sys setuid (s2.s:155-161), the super-user's call only.
+// Entry: AC = the new user id.
+sysSetuid,
+        lac uUid
+        sma                 // skip if the super-user
+        jmp error
+        lac uAc
+        dac uUid
+        jmp sysexit
+
+// sys rename; old; new (s2.s:170-183).
+// Renames the entry old in the current directory new.
+sysRename,
+        jda arg
+        dac lkA
+        jda arg
+        dac lkB
+        lac lkA
+        jda uptr
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp error
+        law FWRITE
+        dac mode
+        jda access
+        lac lkB
+        jda uptr
+        dac cpSrc
+        lac [dName]
+        dac cpDst
+        law NAMEW
+        jda copy
+        jda dput
+        jmp okexit
+
+// sys time (s2.s:190-195).
+// Exit: AC and IO = the time in sixtieths of a second since the start of
+// the year, high word first.
+// Read with breaks off, since the break routine adds to it.
+sysTime,
+        lsm
+        lac sTim
+        dac uAc
+        lac sTim+1
+        esm
+        dac uMq
+        jmp sysexit
+
+// sys chdir; name (s2.s:197-207).
+// The current directory becomes name.
+sysChdir,
+        jda argname
+        jda iget
+        lac iFlags
+        and [IDIR]
+        sza i               // skip if a directory
+        jmp error
+        lac ii
+        dac uCdir
+        jmp okexit
+
+// sys open; name; flags (s2.s:212-237).
+// flags is 0 to read, else to write.
+// Exit: AC = the file descriptor.
+// A directory opens for writing only for the super-user.
+sysOpen,
+        jda arg
+        dac lkA
+        jda arg
+        sza
+        jmp op1
+        law FREAD
+        jmp op2
+op1,    law FWRITE
+op2,    dac mode
+        lac lkA
+        jda uptr
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp error
+        jda iget
+        jda access
+        lac iFlags
+        and [IDIR]
+        sza i               // skip if a directory
+        jmp open1
+        lac mode
+        and [FWRITE]
+        sza i               // skip if for writing
+        jmp open1
+        lac uUid
+        sma                 // skip if the super-user
+        jmp error
+        jmp open1
+
+// sys creat; name (s2.s:239-269).
+// Entry: AC = the permission bits.
+// Exit: AC = a file descriptor open for writing on name, emptied if it was
+// there.
+sysCreat,
+        law FWRITE
+        dac mode
+        jda arg
+        jda uptr
+        dac cpSrc
+        lac [name]
+        dac cpDst
+        law NAMEW
+        jda copy
+        lac [name]
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp cr1
+        jda iget
+        jda access
+        lac iFlags
+        and [IDIR]
+        sza i               // skip if a directory
+        jmp cr0
+        lac uUid
+        sma                 // skip if the super-user
+        jmp error
+cr0,    jda itrunc
+        cla
+        jda dacisize
+        jmp open1
+cr1,    jda access          // write access to the current directory
+        lac uAc
+        and [IMODE]
+        jda icreat
+open1,  jda fassign
+        jmp error
+        jmp sysexit
+
+// sys close (s2.s:272-276).
+// Entry: AC = the file descriptor, returned unchanged.
+sysClose,
+        jda finac
+        dzm fFlags
+        jda fput
+        jmp sysexit
+
+// sys read; buffer; count and sys write; buffer; count (s2.s:278-360).
+// Entry: AC = the file descriptor.
+// Exit: AC = the words moved.
+// The buffer must end at or below 07777 of the caller's bank (1970's
+// 017777).
+// A special file goes to its device's routine (s3.ac, spRead and spWrite),
+// which ends the call itself, as 1970's device switch did (s2.s:296-301,
+// 335-340).
+sysRead,
+        jda rwargs
+        jda finac
+        lac fFlags
+        and [FWRITE]
+        sza                 // skip if open for reading
+        jmp error
+        lac iFlags
+        and [ISPEC]
+        sza                 // skip unless a special file
+        jmp spRead
+        lac fBadd
+        jda iread
+        jmp exitrw
+sysWrite,
+        jda rwargs
+        jda finac
+        lac fFlags
+        and [FWRITE]
+        sza i               // skip if open for writing
+        jmp error
+        lac iFlags
+        and [ISPEC]
+        sza                 // skip unless a special file
+        jmp spWrite
+        lac fBadd
+        jda iwrite
+exitrw, dac uAc
+        add fBadd
+        dac fBadd
+        jda iput
+        jda fput
+        jmp sysexit
+
+// The read and write calls' arguments, checked (s2.s:279-290, 321-329).
+// Sets uBase, uCount and uLimit, and rwBase and rwCount for iread and
+// iwrite.
+// A negative count, or a buffer past 07777, is an error.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+rwargs, 0
+        dap raX
+        jda arg
+        and [07777]
+        dac uBase
+        jda arg
+        dac uCount
+        spa                 // skip if not negative
+        jmp error
+        sub [BANKW]
+        sma                 // skip if below a bank, so the sum cannot overflow
+        jmp error
+        lac uCount
+        add uBase
+        dac uLimit
+        sub [BANKW]
+        sma                 // skip if at or below 07777
+        jmp error
+        lac uBase
+        jda uptr
+        dac rwBase
+        lac uCount
+        dac rwCount
+raX,    jmp .
+
+// sys rblk; buffer, not in 1970.
+// Entry: AC = a block number.
+// The block's 64 words go into the caller's buffer, which must end at or
+// below 07777.
+// Any user may read.
+// check and salv read the file system with it, where 1970's reached the
+// kernel's routines through sysloc.
+// Block 0 is the system block as the kernel holds it, sysdata then zeros,
+// so a reader sees the free list the last call left.
+// Blocks 2 to FSLAST come through the cache.
+// Any other block is an error, where dskrd would halt.
+sysRblk,
+        jda blkargs
+        sza                 // skip if the system block
+        jmp rb1
+        lac bkBuf
+        dac cpDst
+        law BLKW
+        jda copyz
+        lac [sysdata]
+        dac cpSrc
+        lac bkBuf
+        dac cpDst
+        lsm                 // the break routine adds to sTim
+        law SYSDLEN
+        jda copy
+        esm
+        jmp okexit
+rb1,    jda dskget
+        dac cpSrc
+        lac bkBuf
+        dac cpDst
+        law BLKW
+        jda copy
+        jmp okexit
+
+// sys wblk; buffer, not in 1970, the super-user's call only.
+// Entry: AC = a block number.
+// The caller's 64 words are written to the block, through the cache.
+// Block 0 sets the kernel's free list, sNxfblk, sNfblks and sFblks, from
+// the buffer's first twelve words, written to the drum at the call's exit.
+// The unique number and the time stay the kernel's.
+// salv installs the free list it builds this way, where 1970's called the
+// kernel's free.
+// A count of free numbers past NFBLKS is an error, since alloc indexes
+// sFblks by it.
+sysWblk,
+        jda blkargs         // first, so a refusal returns past the argument
+        dac bkB
+        lac uUid
+        sma                 // skip if the super-user
+        jmp error
+        lac bkB
+        sza                 // skip if the system block
+        jmp wb1
+        lac bkBuf
+        add [1]
+        dac sysP
+        lac i sysP          // the count of free numbers
+        spa                 // skip unless negative
+        jmp error
+        sub [NFBLKS+1]
+        sma                 // skip if NFBLKS or less
+        jmp error
+        lac bkBuf
+        dac cpSrc
+        lac [sysdata]
+        dac cpDst
+        law NFBLKS+2
+        jda copy
+        dzm savblk          // the system block is written at the call's exit
+        jmp okexit
+wb1,    lac bkBuf
+        dac cpSrc
+        lac [dskbuf]
+        dac cpDst
+        law BLKW
+        jda copy
+        lac bkB
+        jda dskwr
+        jmp okexit
+
+// The block calls' arguments, checked.
+// The buffer, 64 words at or below 07777, is made a 16-bit pointer in
+// bkBuf.
+// The block number, the caller's AC (uAc), must be 0 or 2 to FSLAST, else
+// the call is an error.
+// Exit: AC = the block number.
+// IO is clobbered.
+// Called by jda.
+blkargs, 0
+        dap baX
+        jda arg
+        and [07777]
+        dac bkBuf
+        sub [BANKW-BLKW+1]
+        sma                 // skip if its last word is at or below 07777
+        jmp error
+        lac bkBuf
+        jda uptr
+        dac bkBuf
+        lac uAc
+        spa                 // skip unless negative, -0 too
+        jmp error
+        sza i               // skip unless the system block
+        jmp baX
+        sub [FSFIRST]
+        spa                 // skip if 2 or more
+        jmp error
+        lac uAc
+        sub [FSLAST+1]
+        sma                 // skip if FSLAST or less
+        jmp error
+        lac uAc
+baX,    jmp .

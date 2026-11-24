@@ -1,0 +1,440 @@
+as1p
+// as1p is as1's ninth overlay, the eighth in the as1x file.
+// It finds each word's size and the place of every 16th (MAPT), makes the
+// xct report, builds the literals' tree, and, when nothing was reported as
+// an error, sets the literals' addresses and the program's origin.
+// See as1.am1.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+OV/
+// The sizes, the xct check and the literals; then the output, or the count
+// of errors and nothing written.
+        jda sizes
+        jda xcts
+        jda lits
+        lac nerr
+        sza i
+        jmp p1
+        jda putd
+        lac [M_ERRS]
+        jda putm
+        lac [012]
+        jda putc
+        jda tmpdel
+        jmp exit
+p1,
+        jda place
+        lac [OVO]
+        jmp ovload
+
+// Each word's size.
+// From the last word back, a skip with no words after it is marked (FSIZE)
+// when the next word is more than one PDP-1 word.
+// Then MAPT is set, the words before each group of 16, and the total after
+// the last group.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+sizes,  0
+        dap sizesx
+        lac lastk
+        add [1]
+        dac sk
+sz1,
+        law i 1
+        add sk
+        dac sk
+        spa                         // skip while k is 0 or more
+        jmp sz3
+        jda getf
+        and [KMASK|FSKIP|FSIZE]
+        sas [KCODE|FSKIP]
+        jmp sz1
+        lac sk
+        add [1]
+        jda wsize
+        sad [1]
+        jmp sz1
+        lac sk
+        jda getf
+        lac i fptr
+        ior [FSIZE]
+        dac i fptr
+        jmp sz1
+sz3,
+        dzm sk
+        dzm sn
+sz4,
+        lac sk
+        and [017]
+        sza
+        jmp sz5
+        lac sk
+        sar 4s
+        add [MAPT]
+        dac sp
+        lac sn
+        dac i sp
+sz5,
+        lac sk
+        sad nw
+        jmp sz6
+        jda wsize
+        add sn
+        dac sn
+        idx sk
+        jmp sz4
+sz6,
+        lac nw
+        sar 4s
+        add [MAPT+1]
+        dac sp
+        lac sn
+        dac i sp
+sizesx, jmp .
+
+// Reports as an error each xct, relocatable, of a word in the program that
+// is not one PDP-1 word.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+xcts,   0
+        dap xctsx
+        dzm sk
+xc1,
+        lac lastk
+        sub sk
+        spa                         // skip while k is not past the last word stored
+        jmp xctsx
+        lac sk
+        jda getf
+        and [KMASK|CMASK|FREL]
+        sas [KCODE|CMEM|FREL]
+        jmp xc2
+        lac sk
+        jda getv
+        dac sv
+        and [0740000]
+        sas [OXCT]
+        jmp xc2
+        lac sv
+        and [017777]
+        sub [010000]
+        spa                         // skip if not below the program
+        jmp xc2
+        dac st
+        sub nk
+        sma                         // skip if in it
+        jmp xc2
+        lac st
+        jda wsize
+        sad [1]
+        jmp xc2
+        lac sk
+        lio [M_XCT]
+        jda report
+xc2,
+        idx sk
+        jmp xc1
+xctsx,  jmp .
+
+// The literals of the words' records, in order, into the tree.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+lits,   0
+        dap litsx
+        jda rinit
+        dzm sk
+ls1,
+        lac lastk
+        sub sk
+        spa                         // skip while k is not past the last word stored
+        jmp litsx
+        lac sk
+        jda rdrec
+        dzm sj
+ls2,
+        lac sj
+        sad rnit
+        jmp ls4
+        add [ITEMB]
+        dac sp
+        lac i sp
+        dac sv
+        and [0700000]
+        sas [TLIT]
+        jmp ls3
+        lac sv
+        and [1]
+        dac st
+        lac sj
+        add [ITEMC]
+        dac sp
+        lio st
+        lac i sp
+        jda litins
+ls3,
+        idx sj
+        jmp ls2
+ls4,
+        idx sk
+        jmp ls1
+litsx,  jmp .
+
+// The literal v into the tree, once.
+// am1 pools a literal under its value's decimal text, in a binary tree in
+// the order the literals are first met, and lays them out in preorder.
+// An entry, at LITS, is two words.
+// They are the value, and the left and the right links, nine bits each, an
+// entry's index plus one.
+// More than MAXLIT literals stop as1 with "too many literals".
+// Entry: AC = v, IO = 1 for the text [1], 0 for [0000001].
+// AC and IO are clobbered.
+// Called via jda.
+litins, 0
+        dap litinsx
+        dio lq
+        lac litins
+        sas [1]
+        jmp li1
+        lac lq
+        sza i
+        jmp li0
+        dac lone
+        jmp li1
+li0,
+        lac [1]
+        dac llong
+li1,
+        lac litins
+        jda lkey
+        lac lk1
+        dac lv1
+        lac lk2
+        dac lv2
+        lac nlit
+        sza i
+        jmp li9
+
+        // Looked for from the root, and added where it is not.
+        lac [LITS]
+        dac lp
+li6,
+        lac i lp
+        jda lkey
+        lac lv1
+        sub lk1
+        sza
+        jmp li7
+        lac lv2
+        sub lk2
+        sza i
+        jmp litinsx                 // found
+li7,
+        dac lc                      // less goes left
+        idx lp
+        lac i lp
+        lio lc
+        spi
+        sar 9s
+        and [0777]
+        sza i
+        jmp li8
+        sub [1]
+        sal 1s
+        add [LITS]
+        dac lp
+        jmp li6
+
+        // A new entry, linked from the links word at lp.
+li8,
+        lac nlit
+        sub [MAXLIT]
+        spa
+        jmp li8a
+        lac [m_lits]
+        jmp fatal
+li8a,
+        lac nlit
+        add [1]
+        lio lc
+        spi
+        sal 9s
+        ior i lp
+        dac i lp
+li9,
+        lac nlit
+        sal 1s
+        add [LITS]
+        dac lp
+        lac litins
+        dac i lp
+        idx lp
+        dzm i lp
+        idx nlit
+litinsx, jmp .
+
+// A literal's key, in lk1 and lk2.
+// The key is its decimal digits, each plus one, then 0s; the first three as
+// a number in lk1, the next three in lk2, so that the keys compare as the
+// texts do.
+// Entry: AC = the value.
+// AC and IO are clobbered.
+// Called via jda.
+lkey,   0
+        dap lkeyx
+        lac [ldg+6]
+        dac lkp
+        lac lkey
+lky1,
+        lio [012]
+        jda udiv
+        dac lkq
+        law i 1
+        add lkp
+        dac lkp
+        dio i lkp
+        idx i lkp
+        lac lkq
+        sza
+        jmp lky1
+        jda lk3
+        dac lk1
+        jda lk3
+        dac lk2
+lkeyx,  jmp .
+
+// Three digits of a key from lkp on, as one number, base 11.
+// Entry: lkp = the first digit's address; AC is ignored.
+// Exit: AC = the number; lkp is advanced past them.
+// IO is preserved.
+// Called via jda.
+lk3,    0
+        dap lk3x
+        dzm lacc
+        law i 3
+        dac lkn
+lk31,
+        lac lacc
+        sal 3s
+        add lacc
+        add lacc
+        add lacc
+        add i lkp
+        dac lacc
+        idx lkp
+        isp lkn
+        jmp lk31
+        lac lacc
+lk3x,   jmp .
+
+// Each literal's address, in preorder from the root after the r_ words, to
+// its links word.
+// Then the origin is set past them (and one more word when 1 is written both
+// ways), and the program is checked to end below TOP.
+// If it does not, as1 stops with "too big".
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+place,  0
+        dap placex
+        lac [0110]
+        add nent
+        dac pa
+        lac nlit
+        sza i
+        jmp pl4
+        lac [ITEMC]                 // the stack, nlit words at most
+        dac pst
+        lac [1]
+        jda push
+pl1,
+        lac pst
+        sad [ITEMC]
+        jmp pl4
+        law i 1
+        add pst
+        dac pst
+        lac i pst
+        sub [1]
+        sal 1s
+        add [LITS+1]
+        dac pl
+        lac i pl
+        and [0777]
+        sza
+        jda push                    // the right, done after the left
+        lac i pl
+        sar 9s
+        and [0777]
+        sza
+        jda push
+        lac pa
+        dac i pl
+        idx pa
+        jmp pl1
+pl4,
+        lac pa
+        dac origin
+        lac lone
+        sza i
+        jmp pl5
+        lac llong
+        sza i
+        jmp pl5
+        idx origin
+pl5,
+        lac lastk
+        add [1]
+        jda mapt
+        sub [TOP+1]
+        spa
+        jmp placex
+        lac [m_big]
+        jmp fatal
+placex, jmp .
+
+// An entry's index plus one onto the stack at pst.
+// Entry: AC = the index plus one.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+push,   0
+        dap pushx
+        lac push
+        dac i pst
+        idx pst
+pushx,  jmp .
+
+#include "as1pi.ac"
+
+sk,     0
+sn,     0
+sp,     0
+sj,     0
+sv,     0
+st,     0
+lq,     0
+lp,     0
+lc,     0
+lv1,    0
+lv2,    0
+lk1,    0
+lk2,    0
+lkp,    0
+lkq,    0
+lkn,    0
+lacc,   0
+pa,     0
+pl,     0
+pst,    0
+ldg,    0; 0; 0; 0; 0; 0            // a key's digits, then six 0s
+        0; 0; 0; 0; 0; 0
+m_lits, 0164157; 0157040; 0155141; 0156171; 0040154; 0151164 // "too many literals"
+        0145162; 0141154; 0163000
+
+        constants
+start 020000

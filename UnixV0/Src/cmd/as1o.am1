@@ -1,0 +1,362 @@
+as1o
+// as1o is as1's tenth overlay, the ninth in the as1x file, and the last.
+// It writes the PDP-1 program over a.out, from 0.
+// That is a jmp to the origin, the system frame, the r_ words, the literals,
+// then each word's PDP-1 words from its record, operands filled and skips
+// composed.
+// It then makes n.out's relocatable values PDP-1 addresses, and removes
+// a.rel.
+// See as1.am1.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+OV/
+// a.out is made anew and written, then n.out; a.rel and as1t are removed.
+// creat's AC is the modes a new file gets, as's 017.
+        lac [017]
+        cal SYSCREAT
+        n_aout
+        dac fdrw
+        sma                         // skip if a.out cannot be made
+        jmp o1
+        lac [m_aout]
+        jmp fatal
+o1,
+        dzm swn
+        lac origin
+        ior [P_JMP]
+        jda swr
+        law i 077                   // 1 to 077
+        dac on
+o2,
+        cla
+        jda swr
+        isp on
+        jmp o2
+        lac [ofr]                   // 0100 to 0107
+        dac oq
+        law i 010
+        dac on
+o3,
+        lac i oq
+        jda swr
+        idx oq
+        isp on
+        jmp o3
+
+        // The r_ words, the literals by address, and 0s to the origin.
+        lac nent
+        sza i
+        jmp o4a
+        cma
+        dac on
+o4,
+        lac [P_JMP]
+        jda swr
+        isp on
+        jmp o4
+o4a,
+        lac swn
+        sad origin
+        jmp o6
+        jda litv
+        jda swr
+        jmp o4a
+
+        // The words.
+o6,
+        jda rinit
+        dzm k
+o10,
+        lac lastk
+        sub k
+        spa                         // skip while k is not past the last word stored
+        jmp o20
+        lac k
+        jda rdrec
+        sza
+        jmp o11
+        jda swr                     // a reserved word, 0
+        jmp o19
+o11,
+        dzm oj
+        lac rhas
+        sza
+        jmp o13
+        lac rnit
+        dac oe
+        jda oitems
+        jmp o19
+
+        // A skip is written as the words before it, then, with words after
+        // it, the skip, jmp s_a, those words, jmp to the word after next, and
+        // those words again at s_a.
+        // With no words after it, it is the skip, or, when the next word is
+        // more than one, the inverted skip and the jmp.
+o13,
+        lac rnpre
+        dac oe
+        jda oitems
+        lac rnit
+        sub rnpre
+        dac onp
+        sza i
+        jmp o15
+        lac rska
+        jda oskw
+        lac swn
+        add onp
+        add [2]
+        and [07777]
+        ior [P_JMP]
+        jda swr
+        jda opost
+        jda ojmpy
+        jda opost
+        jmp o19
+o15,
+        lac rdf
+        and [FSIZE]
+        sad [FSIZE]
+        jmp o16
+        lac rska
+        jda oskw
+        jmp o19
+o16,
+        lac rski
+        jda oskw
+        jda ojmpy
+o19,
+        idx k
+        jmp o10
+o20,
+        jda sflush
+        lac fdrw
+        cal SYSCLOSE
+
+        // n.out, each relocatable value the PDP-1 address, written in place.
+        lac [n_nout]
+        jda openw
+        dac fdrw
+        sma                         // skip if n.out cannot be written
+        jmp o21
+        lac [m_nout]
+        jmp fatal
+o21,
+        dzm swn
+        dzm oj
+o22,
+        lac nnout
+        sub oj
+        sub [6]
+        spa                         // skip if a whole entry is left
+        jmp o24
+        law i 6
+        dac on
+o23,
+        lac oj
+        lio [FNOUT]
+        jda cget
+        dac ow
+        lac on
+        sas [0777776]               // its sixth word, the value
+        jmp o23a
+        lac oj
+        sub [1]
+        lio [FNOUT]
+        jda cget
+        sas [1]
+        jmp o23a
+        lac ow
+        jda mapt
+        and [07777]
+        dac ow
+o23a,
+        lac ow
+        jda swr
+        idx oj
+        isp on
+        jmp o23
+        jmp o22
+o24,
+        jda sflush
+        lac fdrw
+        cal SYSCLOSE
+        cal SYSUNLINK
+        n_arel
+        jda tmpdel
+        jmp exit
+
+// Items oj to oe of the record, operands filled, to a.out.
+// Entry: oj = the first item, oe = the item past the last; AC is ignored.
+// Exit: oj = oe.
+// AC and IO are clobbered.
+// Called via jda.
+oitems, 0
+        dap oitemsx
+oi1,
+        lac oj
+        sad oe
+        jmp oitemsx
+        add [ITEMC]
+        dac oq
+        lio i oq
+        lac oj
+        add [ITEMB]
+        dac oq
+        lac i oq
+        jda opnd
+        dac ow
+        lac oj
+        add [ITEMA]
+        dac oq
+        lac i oq
+        ior ow
+        jda swr
+        idx oj
+        jmp oi1
+oitemsx, jmp .
+
+// The items after the skip, to a.out.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+opost,  0
+        dap opostx
+        lac rnpre
+        dac oj
+        lac rnit
+        dac oe
+        jda oitems
+opostx, jmp .
+
+// A skip's word with the skip's operand, to a.out.
+// Entry: AC = the word.
+// AC and IO are clobbered.
+// Called via jda.
+oskw,   0
+        dap oskwx
+        lio rskc
+        lac rskb
+        jda opnd
+        ior oskw
+        jda swr
+oskwx,  jmp .
+
+// jmp to the word after next, to a.out.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+ojmpy,  0
+        dap ojmpyx
+        lac k
+        add [2]
+        jda mapt
+        and [07777]
+        ior [P_JMP]
+        jda swr
+ojmpyx, jmp .
+
+// An operand's address, for the word about to be written.
+// It is none (0); a word's PDP-1 address; a base's plus the offset; a
+// literal's; or the address of the word itself plus 2.
+// Entry: AC = the operand (ITEMB), IO = what follows it (ITEMC).
+// Exit: AC = the address.
+// IO is clobbered.
+// Called via jda.
+opnd,   0
+        dap opndx
+        dio opc
+        lac opnd
+        and [0700000]
+        sza i
+        jmp opndx
+        sad [TMAP]
+        jmp op1
+        sad [TBASE]
+        jmp op2
+        sad [TLIT]
+        jmp op3
+        lac swn                     // TDOT2
+        add [2]
+        jmp op9
+op1,
+        lac opnd
+        and [077777]
+        jda mapt
+        jmp op9
+op2,
+        lac opnd
+        and [077777]
+        jda mapt
+        add opc
+        jmp op9
+op3,
+        lac [LITS]
+        dac lp
+op4,
+        lac i lp
+        sad opc
+        jmp op5
+        idx lp
+        idx lp
+        jmp op4
+op5,
+        idx lp
+        lac i lp                    // its address, in its links word
+        jmp opndx
+op9,
+        and [07777]
+opndx,  jmp .
+
+// The value of the literal at address a, 0 where none is.
+// Entry: AC = a.
+// Exit: AC = the value.
+// IO is clobbered.
+// Called via jda.
+litv,   0
+        dap litvx
+        lac [LITS+1]
+        dac lp
+        lac nlit
+        sza i
+        jmp litvx
+        cma
+        dac lvn
+lv1,
+        lac i lp
+        sad litv
+        jmp lv2
+        idx lp
+        idx lp
+        isp lvn
+        jmp lv1
+        cla
+        jmp litvx
+lv2,
+        law i 1
+        add lp
+        dac lp
+        lac i lp
+litvx,  jmp .
+
+#include "as1pi.ac"
+
+// The system frame, at 0100.
+ofr,    SYSFRAME()
+
+k,      0                           // the word
+on,     0
+oq,     0
+oj,     0
+oe,     0
+ow,     0
+onp,    0
+opc,    0
+lp,     0
+lvn,    0
+
+        constants
+start 020000

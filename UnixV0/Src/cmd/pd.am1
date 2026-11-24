@@ -1,0 +1,117 @@
+pd
+// Translated by as7am1 from the PDP-7 source cmd/pd.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+h_m,    07777                           // by hand, an address's bits, for error
+0100/
+        SYSFRAME()
+0113/
+w_10000,cal 03
+w_10001,u_dotdot
+w_10002,0000000
+w_10003,sma i
+w_10004,jda u_error
+w_10005,dac u_df
+w_10006,law u_tbuf+07
+w_10007,dac 010
+w_10010,lac u_df
+w_10011,cal 04
+w_10012,u_tbuf
+w_10013,0000010
+w_10014,sma i
+w_10015,jda u_error
+w_10016,sza i
+w_10017,jmp w_10034
+w_10020,lac u_tbuf
+w_10021,sza i
+w_10022,jmp w_10010
+w_10023,law i 010
+w_10024,dac u_c1
+w_10025,law u_df
+w_10026,dac 011
+w_10027,idx 011
+        lac i 011
+w_10030,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10031,idx u_c1
+        sza
+w_10032,jmp w_10027
+w_10033,jmp w_10010
+w_10034,lac u_df
+w_10035,cal 011
+w_10036,lac [0760017]
+w_10037,cal 06
+w_10040,u_dotdot
+w_10041,sma i
+w_10042,jda u_error
+w_10043,dac u_df
+w_10044,law u_tbuf+06
+w_10045,cma
+        sub [1]
+w_10046,add 010
+w_10047,dac w_10053
+w_10050,lac u_df
+w_10051,cal 05
+w_10052,x_end
+w_10053,0010000
+w_10054,sma i
+w_10055,jda u_error
+w_10056,lac u_df
+w_10057,cal 011
+w_10060,cal 016
+u_error,0000000
+        dap r_error
+        lac u_error
+// By hand, the calling jda's address, from its return in r_error, the address bits alone.
+w_10062,law i 01
+w_10063,add r_error
+        and h_m
+// By hand, the 1970 code's halt is left out, since it would stop every user's process.
+// The caller's address is in AC in the core image save writes, where the PDP-7 showed
+// it on the console.
+w_10065,cal 01
+u_dotdot,0056056
+w_10067,0040040
+w_10070,0040040
+w_10071,0040040
+u_c1,
+        .+01/
+u_df,
+        .+01/
+u_tbuf,
+        .+010/
+x_end,
+0110/
+r_error,jmp 0
+        constants
+start 020000

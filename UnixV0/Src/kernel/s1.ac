@@ -1,0 +1,313 @@
+// The kernel's first part, after 1970's s1.s.
+// It holds the break vector, the cold start's entry, the system call entry,
+// its exits, its dispatch table, intrp and sysloc, the scheduler (swap), the
+// interrupt check (chkint), and the kernel's side of a break taken from a
+// process (kbrk).
+// Bank 0, the window open throughout.
+// Needs unix.ah.
+// Each sys routine, here and in the other parts, is reached by jmp from the
+// dispatch table and ends the call itself through okexit, error or sysexit.
+
+3/      jmp brk             // s7.ac
+
+100/    jmp coldentry
+SYSENTRY/
+        jmp sysent
+assert SYSENTRY == 0101, "the frame's 0103 names 0:0101"
+
+// The system call entry, from a process bank's frame (its 0101-0103).
+// A process's cal N stores its AC at its bank's 0100 and runs the frame,
+// which opens the window and jumps here through 0:0101.
+// Entry: AC = the 16-bit return address, the word after the cal; IO = the
+//        caller's IO.
+// The call word must be cal N with N from 1 to the table's length, else
+// badcal.
+// The call returns through sysexit with uAc and uMq.
+sysent, dio uMq
+        dac sysRa
+        and [BANKBITS]
+        sad uBank
+        jmp se1
+        law HBADBK
+        jmp halt
+se1,    ior [FRAME]
+        dac sysP
+        lac i sysP
+        dac uAc
+        lac sysRa
+        and [07777]
+        dac uPc
+        dzm uOv             // a call returns with the overflow flag clear
+        law 1               // the system block is unchanged so far
+        dac savblk
+// a process that has spent its quantum gives way here, as in 1970
+// (s1.s:39-41)
+// everything the call needs is in userdata at this point
+        lac uquant
+        sub [QUANT]
+        sma                 // skip if the quantum is not spent
+        jda swap
+// N from the call word, the whole word less cal, so any other word fails
+        lac uPc
+        sub [1]
+        and [07777]
+        ior uBank
+        dac sysP
+        lac i sysP
+        sub [cal]
+        sma sza i           // skip if N is 1 or more
+        jmp badcal
+        dac sysN
+        sub [sysTabE-sysTab+1]
+        sma                 // skip if N is within the table
+        jmp badcal
+        lac sysN
+        add [sysTab-1]
+        dac sysP
+        jmp i sysP
+
+// The system call exits, okexit with AC 0, error with AC -1 (s3.s:386-389),
+// and sysexit with uAc.
+// The system block is written if the call changed the free list
+// (s1.s:63-68), and an interrupt key on the process's standard input ends
+// the process with a core image (s1.s:70-73).
+// Then the running process resumes through its frame's 0104, which closes
+// the window and returns to the 12-bit address in 0106.
+// At the return AC = uAc, IO = uMq, and the overflow flag is as uOv says,
+// clear after a call and as it was after a preempted resume.
+// Each is reached by jmp.
+// error may be reached from any depth, and the call is abandoned.
+error,  law i 1
+        dac uAc
+        jmp sysexit
+okexit, dzm uAc
+sysexit,
+        jda syssav
+        jda chkint
+        jmp sx1
+        jmp sysSave         // interrupted
+sx1,    lac uBank
+        ior [FRPC]
+        dac sysP
+        lac uPc
+        dac i sysP
+        lac uBank
+        ior [FRLEM]
+        dac sysP
+        szo                 // clears the flag either way
+        nop
+        lac uOv
+        sza i               // skip if the flag was set
+        jmp sx2
+        lac [0377777]
+        add [1]             // overflows, setting the flag
+sx2,    lio uMq
+        lac uAc
+        jmp i sysP
+
+// A break from a running process, diverted here by the break routine (s7.ac,
+// brk) because the process has spent its quantum or an interrupt key hit a
+// terminal.
+// The process's AC, IO, PC and overflow flag are in uAc, uMq, uPc and uOv,
+// as a system call would leave them, with the window open and breaks on.
+// This joins the system call code, as 1970's intrp1 did (s7.s:377-381).
+// An interrupt for this process ends it with a core image, a spent quantum
+// lets the next ready process run, and the process resumes through sysexit.
+// Reached by jmp, from the break routine's return.
+kbrk,   jda chkint
+        jmp kb1
+        jmp sysSave         // interrupted
+kb1,    lac uquant
+        sub [QUANT]
+        sma                 // skip if the quantum is not spent
+        jda swap
+        jmp sysexit
+
+// The dispatch table, one jmp a call number, from 1, 1970's numbering
+// (s1.s:137-142).
+// Calls this kernel does not have answer badcal.
+sysTab, jmp sysSave         // 1 save
+        jmp sysGetuid       // 2 getuid
+        jmp sysOpen         // 3 open
+        jmp sysRead         // 4 read
+        jmp sysWrite        // 5 write
+        jmp sysCreat        // 6 creat
+        jmp sysSeek         // 7 seek
+        jmp sysTell         // 010 tell
+        jmp sysClose        // 011 close
+        jmp sysLink         // 012 link
+        jmp sysUnlink       // 013 unlink
+        jmp sysSetuid       // 014 setuid
+        jmp sysRename       // 015 rename
+        jmp sysExit         // 016 exit
+        jmp sysTime         // 017 time
+        jmp sysIntrp        // 020 intrp
+        jmp sysChdir        // 021 chdir
+        jmp sysChmod        // 022 chmod
+        jmp sysChown        // 023 chown
+        jmp sysRblk         // 024 rblk, not in 1970
+        jmp sysSysloc       // 025 sysloc
+        jmp sysWblk         // 026 wblk, not in 1970
+        jmp sysCapt         // 027 capt
+        jmp sysRele         // 030 rele
+        jmp sysStatus       // 031 status
+        jmp badcal          // 032 unused
+        jmp sysSmes         // 033 smes
+        jmp sysRmes         // 034 rmes
+        jmp sysFork         // 035 fork
+sysTabE,
+assert sysTabE-sysTab == 035, "1970 had 29 call numbers"
+
+// sys intrp (s1.s:148-151).
+// Entry: AC = the new interrupt flag, nonzero to ignore the interrupt key.
+sysIntrp,
+        lac uAc
+        dac uIntflg
+        jmp okexit
+
+// sys sysloc (s1.s:157-174).
+// Entry: AC = an index from 1 to 17.
+// Exit: AC = that kernel address, or -1.
+// The addresses are 16 bits.
+// The routines named here keep their 1970 names, not their calling
+// conventions.
+sysSysloc,
+        lac uAc
+        and [07777]
+        sub [1]
+        spa
+        jmp error
+        sub [locTabE-locTab]
+        sma                 // skip if within the table
+        jmp error
+        add [locTabE]
+        dac sysP
+        lac i sysP
+        dac uAc
+        jmp sysexit
+locTab, iget                // 1
+        inode
+        userdata
+        sysdata
+        copy
+        copyz
+        0777776             // 7 betwen, none in this kernel
+        dskrd
+        dskwr
+        dskbuf
+        0777776             // 013 dpdata, none (no dataphone)
+        namei
+        4                   // 015 pbsflgs, the process's display words in its bank
+        alloc
+        free
+        0777776             // 020 dspdata, none, since the kernel draws nothing
+        0777776             // 021 crdata, none (no card reader)
+locTabE,
+assert locTabE-locTab == 0d17, "sysloc has 17 indexes"
+
+// The scheduler and the idle loop, after 1970's swap (s1.s:85-134).
+// Every process is in core, each in its own bank, so a switch is a change of
+// userdata.
+// The running process's 64 words go to its slot's copy in bank 1, and the
+// next one's come in.
+// The next is the first ready slot after the running one, round the table,
+// the running one last.
+// When none is ready the loop waits for one with breaks on, as 1970's did.
+// The process that called swap resumes, at its next turn, at the instruction
+// after its jda swap, kept in its uSwapret (1970's u.swapret).
+// Called by jda, as 1970 called it, from the system call code where userdata
+// holds all the call's state, since nothing else in bank 0 survives a switch.
+// Turns breaks on (1970's ion), which a caller that has marked the process
+// asleep with breaks off needs.
+// Exit: the process running is the one chosen, and uquant is 0.
+// AC and IO are clobbered.
+swap,   0
+        dap swX
+        esm
+        lac swX
+        dac uSwapret
+sw1,    law i NPROC
+        dac swN
+        lac uSlot
+        dac swS
+sw2,    lac swS             // the next slot, round the table
+        add [1]
+        sad [NPROC]
+        cla
+        dac swS
+        ral 2s              // its process table entry
+        add [ulist]
+        dac swP
+        lac i swP
+        and [PSTAT]
+        sad [PREADY]
+        jmp sw3
+        isp swN
+        jmp sw2
+        jmp sw1             // none ready, so wait
+sw3,    lac swS
+        sad uSlot
+        jmp sw4             // the running one, already in userdata
+        lac [userdata]
+        dac cpSrc
+        lac uSlot
+        ral 6s
+        add [UDSAVE]
+        dac cpDst
+        law UDLEN
+        jda copy
+        lac swS
+        ral 6s
+        add [UDSAVE]
+        dac cpSrc
+        lac [userdata]
+        dac cpDst
+        law UDLEN
+        jda copy
+sw4,    dzm uquant
+        lac uSwapret
+        dac swX
+swX,    jmp .
+
+// Whether an interrupt key has hit the terminal that is the running process's
+// standard input, after 1970's chkint (s1.s:176-214).
+// A terminal's mark is its input's i-number, compared with file descriptor
+// 0's, and cleared when it matches, whether or not the process ignores the
+// key.
+// With no terminal marked it returns at once, since every call's exit comes
+// here and the drum's interleave has no time to spare.
+// A mark made just after the test is seen at the next call or wakeup.
+// Exit: a skip when the process is to be interrupted (uIntflg 0), no skip
+// otherwise.
+// AC and IO are clobbered.
+// Called by jda.
+chkint, 0
+        dap ckiX
+        lac intAny
+        sza i               // skip if some terminal is marked
+        jmp ckiX
+        lsm
+        law i NTERM
+        dac ckiN
+        lac [tInt]
+        dac ckiP
+cki1,   lac i ckiP
+        sza i               // skip if this terminal is marked
+        jmp cki2
+        sad uOfiles+2
+        jmp cki3            // fd 0 is this terminal's input
+cki2,   idx ckiP
+        isp ckiN
+        jmp cki1
+        esm
+        jmp ckiX
+cki3,   dzm i ckiP
+        lac intAny
+        sub [1]
+        dac intAny
+        esm
+        lac uIntflg
+        sza                 // skip unless the process ignores the key
+        jmp ckiX
+        idx ckiX
+ckiX,   jmp .

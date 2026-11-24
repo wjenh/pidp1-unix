@@ -1,0 +1,58 @@
+Unix drum boot
+
+// The drum boot, read in from paper tape into bank 1.
+// It reads the kernel's image, bank 0's 4,096 words that Tools/v0fs's make
+// -k writes into the drum's field 31, into bank 0 with one transfer, and
+// starts the kernel at 0:0100.
+// The transfer starts at the field's word 0 and lands at 0:0, so it may
+// wait up to a revolution, 35 ms, for its address.
+// A boot pays that once, and a start anywhere else would carry the
+// transfer past 0:07777 into this bank.
+// Ten tries on a drum error, then a halt with AC = -1.
+// The kernel's cold start clears bank 1.
+//
+// 20-Nov-2026, Claude: written.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+
+#include "../kernel/unix.ah"
+
+bank 1
+0/
+boot,   lsm
+        cbs
+        law i DRTRIES
+        dac bTry
+b1,     lio [DRMRD+KFIELD]  // read field 31 from its word 0
+        dia
+        lio [KFIELD]        // a count of 0, the whole field
+        dwc
+        cli                 // into 0:0
+        dcl
+b2,     cks                 // busy until the last word has moved
+        dio bT
+        lac bT
+        and [CKSDRM]
+        sza
+        jmp b2
+        cli
+        t23dra
+        dio bT
+        lac bT
+        and [DRERR]
+        sza i               // skip on an error
+        jmp b3
+        isp bTry
+        jmp b1
+        law i 1
+        hlt
+        jmp .-1
+b3,     cbs                 // the transfer's end break
+        eem
+        jmp i [0100]        // 0:0100, the kernel's cold start
+
+bTry,   0
+bT,     0
+
+constants
+
+start boot:1

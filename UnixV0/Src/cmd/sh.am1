@@ -1,0 +1,545 @@
+sh
+// Translated by as7am1 from the PDP-7 source cmd/sh.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp u_clear
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, psharp's start of the line, the value rline's law of the word before lineb
+// gives.
+// The PDP-7 compared with that instruction word itself, which its law put in AC.
+// The PDP-1's law gives only the address.
+h_lb1,  u_nread
+0100/
+        SYSFRAME()
+0121/
+u_clear,jmp u_shell
+w_10001,idx 010
+        dzm i 010
+w_10002,idx u_clear
+        sza
+w_10003,jmp w_10001
+w_10004,lai
+w_10005,jmp 07771
+u_zerop,u_zerop-01
+u_comerr,lac u_d1
+w_10010,cal 05
+w_10011,u_errmes
+w_10012,0000001
+u_shell,lac u_d1
+w_10014,cal 05
+w_10015,u_ready
+w_10016,0000001
+u_shell1,lac u_delim
+w_10020,sad u_newln
+w_10021,jda u_rline
+w_10022,jda u_getcom
+w_10023,lac u_narg
+w_10024,sza i
+w_10025,jmp u_comretrn
+w_10026,lac x_end
+w_10027,sad u_chcom
+w_10030,sma spa
+w_10031,jmp w_10035
+w_10032,lac x_end+01
+w_10033,sad u_spsp
+w_10034,jmp u_doch
+w_10035,cal 035
+w_10036,sma spa
+w_10037,jmp u_loadcom
+w_10040,sma i
+w_10041,jmp u_comerr
+w_10042,lia
+w_10043,lac u_delim
+w_10044,sad u_amper
+w_10045,jmp u_shell1
+w_10046,lai
+w_10047,cli
+w_10050,cal 033
+u_comretrn,lac u_delim
+w_10052,sad u_newln
+w_10053,jmp u_shell
+w_10054,jmp u_shell1
+u_loadcom,cal 03
+w_10056,x_end
+w_10057,0000000
+w_10060,sma
+w_10061,jmp w_10111
+w_10062,cal 012
+w_10063,u_system
+w_10064,x_end
+w_10065,x_end
+w_10066,sma i
+w_10067,jmp w_10073
+w_10070,law i 01
+w_10071,dac u_lnkflg
+w_10072,jmp u_loadcom
+w_10073,lac u_lnkflg
+w_10074,sza i
+w_10075,jmp w_10100
+w_10076,cal 013
+w_10077,x_end
+w_10100,lac u_d1
+w_10101,cal 05
+w_10102,x_end
+w_10103,0000004
+w_10104,lac u_d1
+w_10105,cal 05
+w_10106,u_errmes
+w_10107,0000001
+w_10110,cal 016
+w_10111,lac u_lnkflg
+w_10112,sza i
+w_10113,jmp w_10116
+w_10114,cal 013
+w_10115,x_end
+w_10116,lac u_in
+w_10117,sza i
+w_10120,jmp w_10141
+w_10121,cla
+w_10122,cal 011
+w_10123,cal 03
+w_10124,u_in
+w_10125,0000000
+w_10126,sma
+w_10127,jmp w_10141
+w_10130,lac u_d1
+w_10131,cal 05
+w_10132,u_in
+w_10133,0000004
+w_10134,lac u_d1
+w_10135,cal 05
+w_10136,u_errmes
+w_10137,0000001
+w_10140,cal 016
+w_10141,lac u_out
+w_10142,sza i
+w_10143,jmp w_10153
+w_10144,lac u_d1
+w_10145,cal 011
+w_10146,lac u_o17
+w_10147,cal 06
+w_10150,u_out
+w_10151,sma i
+w_10152,cal 016
+w_10153,lac u_narg
+w_10154,cma
+        sub [1]
+w_10155,dac u_t1
+w_10156,add u_o17771
+w_10157,dac 07777
+w_10160,add u_dm1
+w_10161,dac 010
+w_10162,and u_o7777
+w_10163,dac w_10214
+w_10164,cma
+        sub [1]
+w_10165,add u_d7
+w_10166,dac u_clear
+w_10167,lac u_nargp
+w_10170,dac 011
+w_10171,idx 011
+        lac i 011
+w_10172,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10173,idx u_t1
+        sza
+w_10174,jmp w_10171
+w_10175,lac u_bootp
+w_10176,dac 011
+w_10177,law i 06
+w_10200,dac u_t1
+w_10201,idx 011
+        lac i 011
+w_10202,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10203,idx u_t1
+        sza
+w_10204,jmp w_10201
+w_10205,lac u_d2
+w_10206,lia
+w_10207,lac u_zerop
+w_10210,dac 010
+w_10211,jmp w_10001
+u_boot, cal 04
+w_10213,0                               // by hand, the process bank's 0, PDP-7 4096
+w_10214,0010000
+w_10215,lai
+w_10216,cal 011
+w_10217,jmp 00
+u_getcom,0000000
+        dap r_getcom
+        lac u_getcom
+w_10221,law u_narg
+w_10222,dac 012
+w_10223,dzm u_in
+w_10224,dzm u_out
+w_10225,dzm u_narg
+w_10226,dzm u_lnkflg
+w_10227,jda u_get
+u_nparm,sad u_gr
+w_10231,jmp u_cgr
+w_10232,sad u_ls
+w_10233,jmp u_cls
+w_10234,sad u_amper
+w_10235,jmp u_endcom
+w_10236,sad u_semic
+w_10237,jmp u_endcom
+w_10240,sad u_newln
+w_10241,jmp u_endcom
+w_10242,sad u_space
+w_10243,jmp w_10227
+w_10244,lia
+w_10245,lac u_narg
+w_10246,add u_d4
+w_10247,dac u_narg
+w_10250,lai
+w_10251,jda u_getparm
+w_10252,jmp u_nparm
+u_endcom,dac u_delim
+w_10254,jmp r_getcom
+u_cls,  jda u_get
+w_10256,jda u_getparm
+w_10257,dac u_t1
+w_10260,law u_slash
+w_10261,jmp u_cpio
+u_cgr,  jda u_get
+w_10263,jda u_getparm
+w_10264,dac u_t1
+w_10265,law w_10561
+u_cpio, dac 013
+w_10267,lac 012
+w_10270,add u_dm4
+w_10271,dac 012
+w_10272,lia
+w_10273,law i 04
+w_10274,dac u_c1
+w_10275,idx 012
+        lac i 012
+w_10276,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_10277,idx u_c1
+        sza
+w_10300,jmp w_10275
+w_10301,lai
+w_10302,dac 012
+w_10303,lac u_t1
+w_10304,jmp u_nparm
+u_getparm,0000000
+        dap r_getparm
+        lac u_getparm
+w_10306,lia
+w_10307,law i 010
+w_10310,dac u_c1
+w_10311,lai
+w_10312,sma spa
+w_10313,jda u_get
+w_10314,sad u_space
+w_10315,jmp w_10313
+w_10316,jda u_checkdlm
+w_10317,jmp u_comerr
+w_10320,jmp w_10324
+w_10321,jda u_get
+w_10322,jda u_checkdlm
+w_10323,jmp u_fill1
+w_10324,dac x_lnk
+        ral 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+w_10325,dac x_ac
+        idx u_c1
+        sza
+        jmp s_10325
+        lac x_ac
+        jmp w_10327
+s_10325,lac x_ac
+w_10326,lia
+w_10327,jda u_get
+w_10330,jda u_checkdlm
+w_10331,jmp u_fill
+w_10332,dac x_t
+        lai
+        ior x_t
+w_10333,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10334,idx u_c1
+        sza
+w_10335,jmp w_10321
+w_10336,jda u_get
+w_10337,jda u_checkdlm
+w_10340,jmp r_getparm
+w_10341,jmp w_10336
+u_fill, dac u_t1
+w_10343,lac u_space
+w_10344,dac x_t
+        lai
+        ior x_t
+w_10345,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10346,idx u_c1
+        sza
+w_10347,nop
+w_10350,lac u_t1
+u_fill1,lia
+w_10352,lac u_c1
+w_10353,sma i
+w_10354,jmp w_10357
+w_10355,lai
+w_10356,jmp r_getparm
+w_10357,lac u_spsp
+w_10360,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10361,idx u_c1
+        sza i
+        jmp w_10363
+w_10362,idx u_c1
+        sza
+w_10363,jmp w_10357
+w_10364,lai
+w_10365,jmp r_getparm
+u_checkdlm,0000000
+        dap r_checkdlm
+        lac u_checkdlm
+w_10367,sad u_space
+w_10370,jmp r_checkdlm
+w_10371,sad u_newln
+w_10372,jmp r_checkdlm
+w_10373,sad u_amper
+w_10374,jmp r_checkdlm
+w_10375,sad u_semic
+w_10376,jmp r_checkdlm
+w_10377,dac x_ac
+        idx r_checkdlm
+        lac x_ac
+w_10400,jmp r_checkdlm
+u_get,  0000000
+        dap r_get
+        lac u_get
+w_10402,idx 010
+        lac i 010
+w_10403,sad u_slash
+w_10404,sma spa
+w_10405,jmp r_get
+w_10406,idx 010
+        lac i 010
+w_10407,sad u_newln
+w_10410,sma spa
+w_10411,jmp u_comerr
+w_10412,lai
+w_10413,dac w_10421
+w_10414,jda u_rline
+w_10415,lac w_10421
+w_10416,lia
+w_10417,lac u_space
+w_10420,jmp r_get
+w_10421,0000000
+u_rline,0000000
+        dap r_rline
+        lac u_rline
+w_10423,law u_nread
+w_10424,dac 017
+w_10425,dac 010
+w_10426,jda u_getcha
+w_10427,dac x_ac
+        idx 017
+        lac x_ac
+        dac i 017
+w_10430,sad u_newln
+w_10431,jmp r_rline
+w_10432,sad u_sharp
+w_10433,jmp u_psharp
+w_10434,sad u_atsign
+w_10435,jmp w_10423
+w_10436,jmp w_10426
+u_psharp,law i 01
+w_10440,add 017
+w_10441,sad h_lb1
+w_10442,jmp w_10423
+w_10443,add u_dm1
+w_10444,dac 017
+w_10445,jmp w_10426
+u_getcha,0000000
+        dap r_getcha
+        lac u_getcha
+w_10447,lac u_char
+w_10450,dzm u_char
+w_10451,sza
+w_10452,jmp r_getcha
+w_10453,idx u_nread
+        sza
+w_10454,jmp w_10470
+w_10455,cla
+w_10456,cal 04
+w_10457,u_inbuf
+w_10460,0000100
+w_10461,sma sza i
+w_10462,jmp u_lgout
+w_10463,cma
+        sub [1]
+w_10464,add u_d1
+w_10465,dac u_nread
+w_10466,law u_lineb+0177
+w_10467,dac 016
+w_10470,idx 016
+        lac i 016
+w_10471,lia
+w_10472,and u_o777
+w_10473,dac u_char
+w_10474,dac x_lnk
+        cla
+        rcl 9s
+        swp
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+        swp
+w_10475,jmp r_getcha
+u_doch, lac u_narg
+w_10477,dac x_lnk
+        scr 2s
+w_10500,cma
+        sub [1]
+w_10501,add u_d1
+w_10502,dac u_narg
+w_10503,law x_end+04
+w_10504,dac w_10511
+w_10505,dac x_ac
+        idx u_narg
+        sza
+        jmp s_10505
+        lac x_ac
+        jmp w_10507
+s_10505,lac x_ac
+w_10506,sma spa
+w_10507,jmp u_comretrn
+w_10510,cal 021
+w_10511,0000000
+w_10512,sma i
+w_10513,jmp u_cherr
+w_10514,lac w_10511
+w_10515,add u_d4
+w_10516,dac w_10511
+w_10517,jmp w_10505
+u_cherr,lac w_10511
+w_10521,dac w_10524
+w_10522,lac u_d1
+w_10523,cal 05
+w_10524,0010000
+w_10525,0000004
+w_10526,jmp u_comerr
+u_lgout,cli
+w_10530,lac u_d1
+w_10531,cal 033
+w_10532,cal 016
+u_d1,   0000001
+u_dm1,  0777776
+u_d4,   0000004
+u_dm4,  0777773
+u_d2,   0000002
+// By hand, the loader clears from zerop to the read's end, so its count is the
+// read's less zerop.
+// The 1970 code's complement and add of d7 made -(count - 6) for the PDP-7's zerop
+// at 6, and here it is -(count) + zerop, d7 being zerop's address + 1.
+u_d7,   u_zerop+01
+u_o17,  0000017
+// By hand, the boot code's first word, at the top of the process bank (PDP-7 017771).
+u_o17771,0007771
+u_o7777,0007777
+u_o777, 0000777
+u_gr,   0000076
+u_ls,   0000074
+u_amper,0000046
+u_semic,0000073
+u_space,0000040
+u_sharp,0000043
+u_atsign,0000100
+u_newln,0000012
+u_slash,0000057
+u_in,   0000000
+w_10557,0000000
+w_10560,0000000
+w_10561,0000000
+u_out,  0000000
+w_10563,0000000
+w_10564,0000000
+w_10565,0000000
+u_errmes,0077012
+u_chcom,0143150
+u_ready,0100040
+u_delim,0000012
+u_system,0163171
+w_10573,0163164
+w_10574,0145155
+u_spsp, 0040040
+u_nargp,u_lnkflg
+u_bootp,w_10211
+u_char, 0000000
+u_nread,0777776
+u_lineb,
+        .+0200/
+u_inbuf,
+        .+0100/
+u_c1,
+        .+01/
+u_t1,
+        .+01/
+u_lnkflg,
+        .+01/
+u_narg,
+        .+01/
+x_end,
+0110/
+r_getcom,jmp 0
+r_getparm,jmp 0
+r_checkdlm,jmp 0
+r_get,  jmp 0
+r_rline,jmp 0
+r_getcha,jmp 0
+        constants
+start 020000

@@ -1,0 +1,147 @@
+cp
+// Translated by as7am1 from the PDP-7 source cmd/cp.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0111/
+w_10000,lac 07777
+w_10001,add u_d1
+w_10002,dac u_name2
+u_loop, lac i 07777
+w_10004,sad u_d4
+w_10005,cal 016
+w_10006,sad u_d8
+w_10007,jmp u_unbal
+w_10010,add u_dm8
+w_10011,dac i 07777
+w_10012,lac u_name2
+w_10013,add u_d4
+w_10014,dac u_name1
+w_10015,add u_d4
+w_10016,dac u_name2
+w_10017,cal 03
+u_name1,0000000
+w_10021,0000000
+w_10022,sma i
+w_10023,jmp u_error
+w_10024,lac u_o17
+w_10025,cal 06
+u_name2,0000000
+w_10027,sma i
+w_10030,jmp u_error
+w_10031,dzm u_nin
+w_10032,lac u_bufp
+w_10033,add u_nin
+w_10034,dac w_10044
+w_10035,law i 01
+w_10036,add u_nin
+w_10037,cma
+        sub [1]
+w_10040,add u_d1024
+w_10041,dac w_10045
+w_10042,lac u_d2
+w_10043,cal 04
+w_10044,0010000
+w_10045,0010000
+w_10046,sza i
+w_10047,jmp w_10055
+w_10050,add u_nin
+w_10051,dac u_nin
+w_10052,sad u_d1024
+w_10053,jmp w_10055
+w_10054,jmp w_10032
+w_10055,lac u_nin
+w_10056,dac w_10062
+w_10057,lac u_d3
+w_10060,cal 05
+w_10061,u_buf
+w_10062,0000000
+w_10063,dzm u_nin
+w_10064,lac w_10062
+w_10065,sad u_d1024
+w_10066,jmp w_10032
+w_10067,lac u_d2
+w_10070,cal 011
+w_10071,lac u_d3
+w_10072,cal 011
+w_10073,jmp u_loop
+u_error,lac u_name1
+w_10075,dac w_10100
+w_10076,lac u_d1
+w_10077,cal 05
+w_10100,0000000
+w_10101,0000004
+w_10102,lac u_d1
+w_10103,cal 05
+w_10104,u_mes
+w_10105,0000001
+w_10106,lac u_name2
+w_10107,dac w_10112
+w_10110,lac u_d1
+w_10111,cal 05
+w_10112,0000000
+w_10113,0000004
+w_10114,lac u_d1
+w_10115,cal 05
+w_10116,u_mes
+w_10117,0000002
+w_10120,jmp u_loop
+u_mes,  0040000
+w_10122,0077012
+u_unbal,lac u_name2
+w_10124,add u_d4
+w_10125,dac w_10130
+w_10126,lac u_d1
+w_10127,cal 05
+w_10130,0000000
+w_10131,0000004
+w_10132,lac u_d1
+w_10133,cal 05
+w_10134,u_mes
+w_10135,0000002
+w_10136,cal 016
+u_d1,   0000001
+u_d2,   0000002
+u_d3,   0000003
+u_d4,   0000004
+u_d8,   0000010
+u_o17,  0000017
+u_dm8,  0777767
+u_d1024,0002000
+u_nin,  0000000
+u_bufp, u_buf
+u_buf,
+        .+02000/
+x_end,
+0110/
+        constants
+start 020000

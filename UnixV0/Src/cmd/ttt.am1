@@ -1,0 +1,2087 @@
+ttt
+// Translated by as7am1 from the PDP-7 source cmd/ttt1.s cmd/ttt2.s
+// for a process bank.
+// Its layout is word 0 the jump to the start, 020-077 the translator's words, 0100-0107
+// the system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+#include "unixsys.ah"
+// by hand: the 340's command words, for the display (ttt2.s's lists, rewritten below)
+#include <TYPE340/type340cmds.ah>
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// by hand: the display's words, from 024
+h_lp,   0       // a pen hit on a cell, the word's address, or 0; 1970's dspdata+1
+h_pbs,  0       // the push buttons, 1970's pbsflgs, bit n for button n
+h_now,  0       // the time's low word, in sixtieths
+h_tpen, 0       // when the pen last hit a button
+h_pen,  0       // that button's bit
+h_btk,  0       // when the blinking cells last changed
+h_p,    0       // the cell being looked at
+h_k,    0       // the cells left, counted up from minus
+h_m1,   0777776 // -1, the end mark try puts under its moves (ttt1.s:340)
+h_o7,   7
+h_o5,   5       // the words of a button
+h_o20,  020     // the words of a cell
+h_bper, 0d14    // sixtieths between a blinking cell's changes
+h_m6,   077     // sense switches 1 to 6, in word 4
+h_m17,  0377777
+h_b0,   0400000 // button 0, MOVE
+h_cend, parameter lpoff // each cell's last word, the pen off
+h_bof,  parameter scale(0) intensity(1) next(point) // a blinking cell, dim
+h_cell, u_sbuf+02000 // the word after the last cell
+h_bta,  h_bt0   // the buttons' first words
+h_btb,  h_bt7
+0100/
+        SYSFRAME()
+0144/
+w_10000,lac 07777
+w_10001,add u_d1
+w_10002,dac u_blk2+01
+w_10003,lac i u_blk2+01
+w_10004,sad u_qdt
+w_10005,sma spa
+w_10006,jmp u_loop
+w_10007,dac u_dspflg
+w_10010,law w_12546
+w_10011,dac u_blk1
+w_10012,dac u_blk2
+w_10013,jda u_dsboard
+// by hand: the list starts at the cells, u_sbuf, with the board's lines after them
+// (ttt2.s:205-244 rewritten below), where 1970's started at the lines, dbuf.
+w_10014,law u_sbuf
+w_10015,cal 027
+// by hand: no sysloc (ttt1.s:19-25); the pen's hit on a cell is h_lp and the buttons
+// h_pbs, both made by h_rdpb, which getpb calls.
+w_10016,law h_lp
+w_10021,dac u_lpadr
+w_10022,law h_pbs
+w_10024,dac u_pbadr
+w_10025,dzm i u_lpadr
+u_loop, jda u_move
+w_10027,jda u_must
+w_10030,0600000|u_loop
+w_10031,lac u_imaxin
+w_10032,dac u_maxin
+w_10033,law u_blk2+026
+w_10034,dac 012
+w_10035,jda u_try
+w_10036,0600000|u_unwind
+w_10037,jda u_heur
+w_10040,0600000|u_loop
+u_unwind,lac 014
+w_10042,dac u_blk2+01
+w_10043,lac i u_blk2+01
+w_10044,jda u_mark
+w_10045,0000001
+w_10046,law i 01
+w_10047,add u_blk2+01
+w_10050,dac u_blk2+01
+w_10051,lac i u_blk2+01
+// by hand: the end mark is -1 itself.
+// 1970's spa found it as the one negative word, but the moves under it are line's words,
+// which the PDP-1's add opcode makes negative.
+w_10052,sad h_m1
+w_10053,jmp u_done
+w_10054,jda u_mark
+w_10055,0001000
+w_10056,law i 01
+w_10057,add u_blk2+01
+w_10060,dac u_blk2+01
+w_10061,lac u_dspflg
+w_10062,sza i
+w_10063,jmp w_10043
+w_10064,jda u_getpb
+w_10065,sza
+w_10066,jmp w_10064
+w_10067,jda u_getpb
+w_10070,sza i
+w_10071,jmp w_10067
+w_10072,jmp w_10043
+u_move, 0000000
+        dap r_move
+        lac u_move
+w_10074,lac u_dspflg
+w_10075,sza
+w_10076,jmp u_dspmove
+w_10077,jda u_messg
+w_10100,0000155
+w_10101,0000157
+w_10102,0000166
+w_10103,0000145
+w_10104,0000000
+w_10105,dzm u_blk2+02
+w_10106,jda u_getc
+w_10107,sad u_o12
+w_10110,jmp w_10126
+w_10111,add u_om60
+w_10112,sma i
+w_10113,jmp w_10074
+w_10114,dac u_blk2+03
+w_10115,and u_o3
+w_10116,sad u_blk2+03
+w_10117,sma spa
+w_10120,jmp w_10074
+w_10121,lac u_blk2+02
+w_10122,dac x_lnk
+        ral 2s
+        and [0777774]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000003]
+        ior x_t
+w_10123,xor u_blk2+03
+w_10124,dac u_blk2+02
+w_10125,jmp w_10106
+w_10126,lac u_blk2+02
+w_10127,sma i
+w_10130,jmp w_10074
+w_10131,and u_o77
+w_10132,sad u_blk2+02
+w_10133,sma spa
+w_10134,jmp w_10074
+w_10135,add u_boardp
+w_10136,dac u_blk2+02
+w_10137,lac i u_blk2+02
+w_10140,sza
+w_10141,jmp w_10074
+w_10142,lac u_blk2+02
+w_10143,jda u_mark
+w_10144,0001000
+w_10145,jmp r_move
+u_dspmove,jda u_getpb
+w_10147,sza
+w_10150,jmp u_pbhit
+w_10151,lac i u_lpadr
+w_10152,sza i
+w_10153,jmp u_dspmove
+u_lphit,lia
+w_10155,lac u_blink
+w_10156,sza i
+w_10157,jmp w_10172
+w_10160,cma
+        sub [1]
+w_10161,add u_boardp
+w_10162,cma
+        sub [1]
+w_10163,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_10164,add u_sbufp
+w_10165,dac u_blk2+02
+w_10166,lac u_noblink
+w_10167,dac i u_blk1
+w_10170,dac i u_blk2
+w_10171,dac i u_blk2+02
+w_10172,dzm i u_lpadr
+w_10173,lai
+w_10174,cma
+        sub [1]
+w_10175,add u_sbufp
+w_10176,cma
+        sub [1]
+w_10177,dac x_lnk
+        scr 4s
+w_10200,dac u_blk2+02
+w_10201,and u_o77
+w_10202,sad u_blk2+02
+w_10203,sma spa
+w_10204,jmp u_dspmove
+w_10205,add u_boardp
+w_10206,dac u_blink
+w_10207,lac u_blk2+02
+w_10210,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_10211,add u_sbufp
+w_10212,dac u_blk2+02
+w_10213,lac u_blinkpar
+w_10214,dac i u_blk2+02
+w_10215,jmp u_dspmove
+u_pbhit,lac u_blink
+w_10217,sza i
+w_10220,jmp u_dspmove
+w_10221,jda u_mark
+w_10222,0001000
+w_10223,dzm u_blink
+w_10224,jmp r_move
+u_must, 0000000
+        dap r_must
+        lac u_must
+w_10226,law u_o77
+w_10227,dac 010
+w_10230,law i 0114
+w_10231,dac u_blk2+04
+w_10232,dzm u_blk2+05
+w_10233,dzm u_blk2+06
+w_10234,cla
+w_10235,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10236,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10237,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10240,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10241,sad u_o4
+w_10242,jmp u_done
+w_10243,sad u_o4000
+w_10244,jmp u_done
+w_10245,sad u_o3
+w_10246,dac u_blk2+06
+w_10247,sad u_o3000
+w_10250,sma spa
+w_10251,jmp w_10266
+w_10252,law i 04
+w_10253,add 010
+w_10254,dac 011
+w_10255,cla
+w_10256,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10257,sza
+        jmp s_10257
+        cla
+        jmp w_10261
+s_10257,cla
+w_10260,jmp w_10256
+w_10261,law i 01
+w_10262,add 011
+w_10263,dac 011
+w_10264,idx 011
+        lac i 011
+w_10265,dac u_blk2+05
+w_10266,idx u_blk2+04
+        sza
+w_10267,jmp w_10234
+w_10270,lac u_blk2+06
+w_10271,sza
+w_10272,jmp w_10301
+w_10273,lac u_blk2+05
+w_10274,sza i
+w_10275,jmp w_10301
+w_10276,jda u_mark
+w_10277,0000001
+w_10300,jmp r_must
+w_10301,idx r_must
+w_10302,jmp r_must
+u_done, lac u_dspflg
+w_10304,sza
+w_10305,jmp w_10315
+w_10306,jda u_messg
+w_10307,0000145
+w_10310,0000170
+w_10311,0000151
+w_10312,0000164
+w_10313,0000000
+w_10314,cal 016
+w_10315,law w_12546
+w_10316,dac u_blk1
+w_10317,dac u_blk2
+w_10320,jda u_dsboard
+w_10321,law u_o77
+w_10322,dac 010
+w_10323,law i 0114
+w_10324,dac u_blk2+07
+w_10325,cla
+w_10326,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10327,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10330,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10331,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10332,sad u_o4
+w_10333,jmp w_10341
+w_10334,sad u_o4000
+w_10335,jmp w_10341
+w_10336,dac x_ac
+        idx u_blk2+07
+        sza
+        jmp s_10336
+        lac x_ac
+        jmp w_10340
+s_10336,lac x_ac
+w_10337,jmp w_10325
+w_10340,cal 016
+w_10341,law i 04
+w_10342,add 010
+w_10343,dac 011
+w_10344,idx 011
+        lac i 011
+w_10345,cma
+        sub [1]
+w_10346,add u_boardp
+w_10347,cma
+        sub [1]
+// by hand: the cell's number alone.
+// The word is line's, and with the PDP-1's add opcode the difference is negative, which
+// alss would fill with ones; 1970's tad was positive.
+        and u_o77
+w_10350,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_10351,add u_sbufp
+w_10352,dac u_blk2+07
+w_10353,lac u_blinkpar
+w_10354,dac i u_blk2+07
+w_10355,lac 010
+w_10356,sad 011
+w_10357,sma spa
+w_10360,jmp w_10344
+w_10361,jda u_getpb
+w_10362,sza
+w_10363,jmp w_10361
+w_10364,jda u_getpb
+w_10365,sza i
+w_10366,jmp w_10364
+w_10367,cal 016
+u_mark, 0000000
+        dap r_mark
+        lac u_mark
+w_10371,dac u_blk2+010
+w_10372,lac i r_mark
+w_10373,dac i u_blk2+010
+w_10374,idx r_mark
+w_10375,lac u_dspflg
+w_10376,sza i
+w_10377,jmp w_10413
+w_10400,lac u_blk1
+w_10401,dac u_blk2
+w_10402,lac u_blk2+010
+w_10403,cma
+        sub [1]
+w_10404,add u_boardp
+w_10405,cma
+        sub [1]
+// by hand: the cell's number alone, as in done.
+// From must and unwind the word is line's, negative with the PDP-1's add opcode.
+        and u_o77
+w_10406,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_10407,add u_sbufp
+w_10410,dac u_blk1
+w_10411,jda u_dsboard
+w_10412,jmp r_mark
+w_10413,lac i u_blk2+010
+w_10414,sad u_d1
+w_10415,sma spa
+w_10416,jmp r_mark
+w_10417,lac u_blk2+010
+w_10420,cma
+        sub [1]
+w_10421,add u_boardp
+w_10422,cma
+        sub [1]
+w_10423,dac u_blk2+010
+w_10424,scr 4s
+        and [0037777]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0740000]
+        ior x_t
+w_10425,and u_o3
+w_10426,add u_o60
+w_10427,dac w_10442
+w_10430,lac u_blk2+010
+w_10431,scr 2s
+        and [0177777]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0600000]
+        ior x_t
+w_10432,and u_o3
+w_10433,add u_o60
+w_10434,dac w_10443
+w_10435,lac u_blk2+010
+w_10436,and u_o3
+w_10437,add u_o60
+w_10440,dac w_10444
+w_10441,jda u_messg
+w_10442,0000000
+w_10443,0000000
+w_10444,0000000
+w_10445,0000000
+w_10446,jmp r_mark
+u_try,  0000000
+        dap r_try
+        lac u_try
+w_10450,law u_o77
+w_10451,dac 011
+w_10452,law i 0114
+w_10453,dac u_blk2+014
+w_10454,dzm u_blk2+015
+w_10455,cla
+w_10456,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10457,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10460,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10461,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10462,sad u_o3000
+w_10463,dac u_blk2+015
+w_10464,sad u_o3
+w_10465,sma spa
+w_10466,jmp w_10522
+w_10467,lac 012
+w_10470,dac 014
+w_10471,law i 01
+w_10472,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10473,law i 04
+w_10474,add 011
+w_10475,dac 011
+w_10476,cla
+w_10477,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10500,sza
+        jmp s_10500
+        cla
+        jmp w_10502
+s_10500,cla
+w_10501,jmp w_10477
+w_10502,law i 01
+w_10503,add 011
+w_10504,dac 011
+w_10505,idx 011
+        lac i 011
+w_10506,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10507,lac u_dspflg
+w_10510,sza
+w_10511,jmp r_try
+w_10512,jda u_messg
+w_10513,0000151
+w_10514,0000040
+w_10515,0000167
+w_10516,0000151
+w_10517,0000156
+w_10520,0000000
+w_10521,jmp r_try
+w_10522,idx u_blk2+014
+        sza
+w_10523,jmp w_10455
+w_10524,lac u_blk2+015
+w_10525,sza i
+w_10526,jmp w_10531
+w_10527,dac x_ac
+        idx r_try
+        lac x_ac
+w_10530,jmp r_try
+w_10531,idx u_maxin
+        sza
+w_10532,jmp w_10537
+w_10533,law i 01
+w_10534,dac u_maxin
+w_10535,dac x_ac
+        idx r_try
+        lac x_ac
+w_10536,jmp r_try
+// by hand: try recurses, saving its return word with the rest (ttt1.s:379, 451, 484);
+// that word is r_try here, where jda leaves AC in try.
+w_10537,lac r_try
+w_10540,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10541,lac 010
+w_10542,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10543,lac u_blk2+011
+w_10544,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10545,lac u_blk2+012
+w_10546,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10547,lac u_blk2+013
+w_10550,dac x_ac
+        idx 012
+        lac x_ac
+        dac i 012
+w_10551,law u_o77
+w_10552,dac 010
+w_10553,law i 0114
+w_10554,dac u_blk2+011
+w_10555,cla
+w_10556,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10557,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10560,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10561,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_10562,sad u_o2
+w_10563,sma spa
+w_10564,jmp w_10626
+w_10565,law i 04
+w_10566,add 010
+w_10567,dac 011
+w_10570,cla
+w_10571,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10572,sza
+        jmp s_10572
+        cla
+        jmp w_10574
+s_10572,cla
+w_10573,jmp w_10571
+w_10574,lac 011
+w_10575,dac u_blk2+012
+w_10576,lac i u_blk2+012
+w_10577,dac u_blk2+012
+w_10600,cla
+w_10601,dac x_ac
+        idx 011
+        lac x_ac
+        xct i 011
+w_10602,sza
+        jmp s_10602
+        cla
+        jmp w_10604
+s_10602,cla
+w_10603,jmp w_10601
+w_10604,lac 011
+w_10605,dac u_blk2+013
+w_10606,lac i u_blk2+013
+w_10607,dac u_blk2+013
+w_10610,lac u_d1
+w_10611,dac i u_blk2+012
+w_10612,lac u_o1000
+w_10613,dac i u_blk2+013
+w_10614,jda u_try
+w_10615,0600000|u_prnt
+w_10616,lac u_d1
+w_10617,dac i u_blk2+013
+w_10620,lac u_o1000
+w_10621,dac i u_blk2+012
+w_10622,jda u_try
+w_10623,0600000|u_prnt
+w_10624,dzm i u_blk2+012
+w_10625,dzm i u_blk2+013
+w_10626,idx u_blk2+011
+        sza
+w_10627,jmp w_10555
+w_10630,law i 05
+w_10631,add 012
+w_10632,dac 012
+w_10633,dac 011
+w_10634,idx 011
+        lac i 011
+w_10635,dac r_try
+w_10636,idx 011
+        lac i 011
+w_10637,dac 010
+w_10640,idx 011
+        lac i 011
+w_10641,dac u_blk2+011
+w_10642,idx 011
+        lac i 011
+w_10643,dac u_blk2+012
+w_10644,idx 011
+        lac i 011
+w_10645,dac u_blk2+013
+w_10646,dac x_ac
+        idx r_try
+        lac x_ac
+w_10647,jmp r_try
+u_prnt, lac i u_blk2+012
+w_10651,sad u_d1
+w_10652,jmp w_10657
+w_10653,lac u_blk2+012
+w_10654,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10655,lac u_blk2+013
+w_10656,jmp w_10662
+w_10657,lac u_blk2+013
+w_10660,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10661,lac u_blk2+012
+w_10662,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10663,dzm i u_blk2+012
+w_10664,dzm i u_blk2+013
+w_10665,law i 05
+w_10666,add 012
+w_10667,dac 012
+w_10670,dac 011
+w_10671,idx 011
+        lac i 011
+w_10672,dac r_try
+w_10673,idx 011
+        lac i 011
+w_10674,dac 010
+w_10675,idx 011
+        lac i 011
+w_10676,dac u_blk2+011
+w_10677,idx 011
+        lac i 011
+w_10700,dac u_blk2+012
+w_10701,idx 011
+        lac i 011
+w_10702,dac u_blk2+013
+w_10703,jmp r_try
+u_heur, 0000000
+        dap r_heur
+        lac u_heur
+w_10705,jda u_addpri
+w_10706,law i 02
+w_10707,add u_force
+w_10710,dac u_lforce
+w_10711,law i 01750
+w_10712,dac u_lpri
+w_10713,law i 0100
+w_10714,dac u_blk2+016
+w_10715,lac u_boardp
+w_10716,dac u_blk2+017
+w_10717,lac i u_blk2+017
+w_10720,sza
+w_10721,jmp w_10775
+w_10722,lac u_d1
+w_10723,dac i u_blk2+017
+w_10724,jda u_addpri
+w_10725,lac u_force
+w_10726,sad u_lforce
+w_10727,jmp w_11004
+w_10730,lac u_pri
+w_10731,cma
+        sub [1]
+w_10732,add u_lpri
+w_10733,sma
+        jmp s_10733
+        cma
+        sub [1]
+        jmp w_10735
+s_10733,cma
+        sub [1]
+w_10734,jmp w_10774
+w_10735,sza
+w_10736,jmp w_10766
+w_10737,idx u_prob
+w_10740,law i 01
+w_10741,dzm x_lnk
+w_10742,lia
+        cla
+        scl 1s
+        div u_prob
+        jmp .+2
+        swp
+        jmp w_10744
+u_prob, 0010000
+w_10744,lai
+w_10745,dac x_lnk
+        scr 6s
+w_10746,dac u_force
+w_10747,cal 017
+w_10750,lai
+w_10751,add u_rand
+w_10752,dzm x_lnk
+w_10753,mul w_10754
+        scr 1s
+        jmp w_10755
+w_10754,0110367
+w_10755,lai
+w_10756,dac u_rand
+w_10757,dzm x_lnk
+w_10760,scr 6s
+        and [0007777]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0770000]
+        ior x_t
+w_10761,cma
+        sub [1]
+w_10762,add u_force
+w_10763,sma i
+w_10764,jmp w_10774
+w_10765,jmp w_10770
+w_10766,lac u_d1
+w_10767,dac u_prob
+w_10770,lac u_pri
+w_10771,dac u_lpri
+w_10772,lac u_blk2+017
+w_10773,dac u_lmov
+w_10774,dzm i u_blk2+017
+w_10775,idx u_blk2+017
+        sza i
+        jmp w_10777
+w_10776,idx u_blk2+016
+        sza
+w_10777,jmp w_10717
+w_11000,lac u_lmov
+w_11001,jda u_mark
+w_11002,0000001
+w_11003,jmp r_heur
+w_11004,lac u_blk2+017
+w_11005,jda u_mark
+w_11006,0000001
+w_11007,jmp r_heur
+u_addpri,0000000
+        dap r_addpri
+        lac u_addpri
+w_11011,cli
+w_11012,law u_o77
+w_11013,dac 010
+w_11014,law i 0114
+w_11015,dac u_blk2+020
+w_11016,dzm u_force
+w_11017,cla
+w_11020,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_11021,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_11022,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_11023,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_11024,sas u_o2000
+        jmp w_11026
+w_11025,dac x_ac
+        idx u_force
+        sza
+        jmp s_11025
+        lac x_ac
+        jmp w_11027
+s_11025,lac x_ac
+w_11026,dac u_blk2+021
+w_11027,dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11030,dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11031,dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11032,dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11033,xor u_blk2+021
+w_11034,and u_o77
+w_11035,add w_11077
+w_11036,dac w_11040
+w_11037,lai
+w_11040,add 00
+w_11041,lia
+w_11042,idx u_blk2+020
+        sza
+w_11043,jmp w_11017
+w_11044,law w_11756
+w_11045,dac 010
+w_11046,law i 022
+w_11047,dac u_blk2+020
+w_11050,law i 020
+w_11051,dac u_blk2+021
+w_11052,cla
+w_11053,dac x_ac
+        idx 010
+        lac x_ac
+        xct i 010
+w_11054,dac x_ac
+        idx u_blk2+021
+        sza
+        jmp s_11054
+        lac x_ac
+        jmp u_pstrat
+s_11054,lac x_ac
+w_11055,jmp w_11053
+u_pstrat,jda w_11100
+w_11057,0004002
+w_11060,0000001
+w_11061,jda w_11100
+w_11062,0003001
+w_11063,0000017
+w_11064,jda w_11100
+w_11065,0004001
+w_11066,0000024
+w_11067,jda w_11100
+w_11070,0000001
+w_11071,0000001
+w_11072,idx u_blk2+020
+        sza
+w_11073,jmp w_11050
+w_11074,lai
+w_11075,dac u_pri
+w_11076,jmp r_addpri
+w_11077,add u_pritab
+w_11100,0000000
+        dap r_11100
+        lac w_11100
+w_11101,sad i r_11100
+w_11102,jmp w_11106
+w_11103,dac x_ac
+        idx r_11100
+        lac x_ac
+w_11104,dac x_ac
+        idx r_11100
+        lac x_ac
+w_11105,jmp r_11100
+w_11106,idx r_11100
+w_11107,lai
+w_11110,add i r_11100
+w_11111,lia
+w_11112,cla
+w_11113,dac x_ac
+        idx r_11100
+        lac x_ac
+w_11114,jmp r_11100
+u_dsboard,0000000
+        dap r_dsboard
+        lac u_dsboard
+w_11116,law i 0100
+w_11117,dac u_blk2+022
+w_11120,dzm u_blk2+024
+// by hand: board-1 named from board, since here the lines lie between the cells and it.
+w_11121,law u_board-1
+w_11122,dac 010
+w_11123,law w_12546
+w_11124,dac 013
+w_11125,lac u_noblink
+w_11126,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_11127,lac u_blk2+024
+w_11130,and u_o3
+w_11131,dac x_lnk
+        ral 6s
+        and [0777700]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000077]
+        ior x_t
+w_11132,dac u_blk2+025
+w_11133,dac x_lnk
+        ral 1s
+        and [0777776]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000001]
+        ior x_t
+w_11134,add u_blk2+025
+w_11135,dac u_blk2+025
+w_11136,lac u_blk2+024
+w_11137,and u_o14
+w_11140,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_11141,add u_blk2+025
+w_11142,xor u_setxv
+w_11143,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_11144,lac u_blk2+024
+w_11145,and u_o74
+w_11146,dac x_lnk
+        ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_11147,xor u_setyv
+w_11150,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_11151,idx 010
+        lac i 010
+w_11152,sza i
+w_11153,jmp w_11162
+w_11154,sad u_d1
+w_11155,jmp w_11160
+w_11156,law w_12437
+w_11157,jmp w_11163
+w_11160,law w_12453
+w_11161,jmp w_11163
+w_11162,law w_12467
+w_11163,dac 011
+w_11164,law i 014
+w_11165,dac u_blk2+023
+w_11166,idx 011
+        lac i 011
+w_11167,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_11170,idx u_blk2+023
+        sza
+w_11171,jmp w_11166
+// by hand: a cell's last word turns the pen off and stays in parameter mode, where its
+// first, noblink, leads into point mode for the cell's place (the cells below).
+w_11172,lac h_cend
+w_11173,dac x_ac
+        idx 013
+        lac x_ac
+        dac i 013
+w_11174,idx u_blk2+024
+        sza i
+        jmp w_11176
+w_11175,idx u_blk2+022
+        sza
+w_11176,jmp w_11125
+// by hand: no end mark after the cells (ttt1.s:685-686).
+// The board's lines follow them, and the list's halt is the lines' last word.
+w_11201,lac u_blinkpar
+w_11202,dac i u_blk1
+w_11203,dac i u_blk2
+w_11204,jmp r_dsboard
+u_getc, 0000000
+        dap r_getc
+        lac u_getc
+w_11206,cla
+w_11207,cal 04
+w_11210,u_blk2+026
+w_11211,0000001
+w_11212,sma sza i
+w_11213,cal 01
+w_11214,lac u_blk2+026
+w_11215,dac x_lnk
+        scr 9s
+w_11216,jmp r_getc
+u_messg,0000000
+        dap r_messg
+        lac u_messg
+w_11220,law i 01
+// by hand: the call's return is r_messg (ttt1.s:704), where jda leaves AC in messg; its
+// jmp is only the opcode, and leaves the address a pointer in the bank.
+w_11221,add r_messg
+w_11222,dac 011
+w_11223,idx 011
+        lac i 011
+w_11224,sza i
+w_11225,jmp w_11234
+w_11226,dac u_blk2+026
+w_11227,lac u_d1
+w_11230,cal 05
+w_11231,u_blk2+026
+w_11232,0000001
+w_11233,jmp w_11223
+w_11234,lac u_d1
+w_11235,cal 05
+w_11236,u_o12
+w_11237,0000001
+// by hand: past the message's 0, which 011 names.
+// The PDP-7 stepped 9 before the jump.
+        idx 011
+w_11240,jmp i 011
+u_getpb,0000000
+        dap r_getpb
+        lac u_getpb
+// by hand: the buttons and the pen read into h_pbs and h_lp by h_rdpb, which asks the
+// time as ttt1.s:721 did, and makes the blinking cells blink.
+w_11242,jda h_rdpb
+w_11243,lac i u_pbadr
+w_11244,and u_o2000
+w_11245,sza
+w_11246,cal 016
+w_11247,lac i u_pbadr
+w_11250,jmp r_getpb
+u_boardp,u_board
+u_sbufp,u_sbuf
+u_qdt,  0144164
+u_imaxin,0770137
+// by hand: the 340's words for a cell's first three (dsboard, ttt1.s:641-660).
+// They are its intensity, steady or blinking, and scale 0, into point mode; x, written
+// first, staying in point mode; y, into parameter mode, for the glyph's parameter word.
+// The scale is set in each cell, since the 340 keeps it from the frame before, whose
+// buttons end at scale 1.
+u_noblink,parameter scale(0) intensity(5) next(point)
+u_blinkpar,parameter scale(0) intensity(7) next(point)
+u_setxv,x(0) next(point)
+u_setyv,y(0) next(parameter)
+u_o12,  0000012
+u_o14,  0000014
+u_o74,  0000074
+u_o3,   0000003
+u_o2000,0002000
+u_o60,  0000060
+u_o4,   0000004
+u_o3000,0003000
+u_o4000,0004000
+u_o2,   0000002
+u_o1000,0001000
+u_d1,   0000001
+u_om60, 0777717
+u_o77,  0000077
+// by hand: the tables' words, executed by xct to add a cell (1970's tb, an add of
+// board-1), take the PDP-1's add, 0400000, for the PDP-7's tad, 0340000 (the PDP-1's dzm).
+// They are negative here, so unwind finds try's end mark with sad (w_10052) and mark and
+// done mask the cell's number before shifting it (and u_o77).
+u_line,0400000|u_board+063
+w_11300,0400000|u_board+067
+w_11301,0400000|u_board+073
+w_11302,0400000|u_board+077
+w_11303,0400000|u_board
+w_11304,0400000|u_board+05
+w_11305,0400000|u_board+012
+w_11306,0400000|u_board+017
+w_11307,0400000|u_board+01
+w_11310,0400000|u_board+05
+w_11311,0400000|u_board+011
+w_11312,0400000|u_board+015
+w_11313,0400000|u_board+01
+w_11314,0400000|u_board+021
+w_11315,0400000|u_board+041
+w_11316,0400000|u_board+061
+w_11317,0400000|u_board+01
+w_11320,0400000|u_board+025
+w_11321,0400000|u_board+051
+w_11322,0400000|u_board+075
+w_11323,0400000|u_board+02
+w_11324,0400000|u_board+06
+w_11325,0400000|u_board+012
+w_11326,0400000|u_board+016
+w_11327,0400000|u_board+02
+w_11330,0400000|u_board+026
+w_11331,0400000|u_board+052
+w_11332,0400000|u_board+076
+w_11333,0400000|u_board+02
+w_11334,0400000|u_board+022
+w_11335,0400000|u_board+042
+w_11336,0400000|u_board+062
+w_11337,0400000|u_board+03
+w_11340,0400000|u_board+06
+w_11341,0400000|u_board+011
+w_11342,0400000|u_board+014
+w_11343,0400000|u_board+03
+w_11344,0400000|u_board+07
+w_11345,0400000|u_board+013
+w_11346,0400000|u_board+017
+w_11347,0400000|u_board+03
+w_11350,0400000|u_board+022
+w_11351,0400000|u_board+041
+w_11352,0400000|u_board+060
+w_11353,0400000|u_board+03
+w_11354,0400000|u_board+023
+w_11355,0400000|u_board+043
+w_11356,0400000|u_board+063
+w_11357,0400000|u_board+03
+w_11360,0400000|u_board+026
+w_11361,0400000|u_board+051
+w_11362,0400000|u_board+074
+w_11363,0400000|u_board+074
+w_11364,0400000|u_board+075
+w_11365,0400000|u_board+076
+w_11366,0400000|u_board+077
+w_11367,0400000|u_board+03
+w_11370,0400000|u_board+027
+w_11371,0400000|u_board+053
+w_11372,0400000|u_board+077
+w_11373,0400000|u_board+04
+w_11374,0400000|u_board+05
+w_11375,0400000|u_board+06
+w_11376,0400000|u_board+07
+w_11377,0400000|u_board+04
+w_11400,0400000|u_board+024
+w_11401,0400000|u_board+044
+w_11402,0400000|u_board+064
+w_11403,0400000|u_board+04
+w_11404,0400000|u_board+025
+w_11405,0400000|u_board+046
+w_11406,0400000|u_board+067
+w_11407,0400000|u_board+05
+w_11410,0400000|u_board+025
+w_11411,0400000|u_board+045
+w_11412,0400000|u_board+065
+w_11413,0400000|u_board+06
+w_11414,0400000|u_board+026
+w_11415,0400000|u_board+046
+w_11416,0400000|u_board+066
+w_11417,0400000|u_board+07
+w_11420,0400000|u_board+026
+w_11421,0400000|u_board+045
+w_11422,0400000|u_board+064
+w_11423,0400000|u_board+07
+w_11424,0400000|u_board+027
+w_11425,0400000|u_board+047
+w_11426,0400000|u_board+067
+w_11427,0400000|u_board+010
+w_11430,0400000|u_board+011
+w_11431,0400000|u_board+012
+w_11432,0400000|u_board+013
+w_11433,0400000|u_board+010
+w_11434,0400000|u_board+031
+w_11435,0400000|u_board+052
+w_11436,0400000|u_board+073
+w_11437,0400000|u_board+010
+w_11440,0400000|u_board+030
+w_11441,0400000|u_board+050
+w_11442,0400000|u_board+070
+w_11443,0400000|u_board+013
+w_11444,0400000|u_board+033
+w_11445,0400000|u_board+053
+w_11446,0400000|u_board+073
+w_11447,0400000|u_board+014
+w_11450,0400000|u_board+015
+w_11451,0400000|u_board+016
+w_11452,0400000|u_board+017
+w_11453,0400000|u_board+014
+w_11454,0400000|u_board+030
+w_11455,0400000|u_board+044
+w_11456,0400000|u_board+060
+w_11457,0400000|u_board+014
+w_11460,0400000|u_board+031
+w_11461,0400000|u_board+046
+w_11462,0400000|u_board+063
+w_11463,0400000|u_board+014
+w_11464,0400000|u_board+034
+w_11465,0400000|u_board+054
+w_11466,0400000|u_board+074
+w_11467,0400000|u_board+014
+w_11470,0400000|u_board+035
+w_11471,0400000|u_board+056
+w_11472,0400000|u_board+077
+w_11473,0400000|u_board+015
+w_11474,0400000|u_board+031
+w_11475,0400000|u_board+045
+w_11476,0400000|u_board+061
+w_11477,0400000|u_board+015
+w_11500,0400000|u_board+035
+w_11501,0400000|u_board+055
+w_11502,0400000|u_board+075
+w_11503,0400000|u_board+016
+w_11504,0400000|u_board+032
+w_11505,0400000|u_board+046
+w_11506,0400000|u_board+062
+w_11507,0400000|u_board+064
+w_11510,0400000|u_board+065
+w_11511,0400000|u_board+066
+w_11512,0400000|u_board+067
+w_11513,0400000|u_board+016
+w_11514,0400000|u_board+036
+w_11515,0400000|u_board+056
+w_11516,0400000|u_board+076
+w_11517,0400000|u_board+017
+w_11520,0400000|u_board+033
+w_11521,0400000|u_board+047
+w_11522,0400000|u_board+063
+w_11523,0400000|u_board+017
+w_11524,0400000|u_board+032
+w_11525,0400000|u_board+045
+w_11526,0400000|u_board+060
+w_11527,0400000|u_board+017
+w_11530,0400000|u_board+036
+w_11531,0400000|u_board+055
+w_11532,0400000|u_board+074
+w_11533,0400000|u_board+017
+w_11534,0400000|u_board+037
+w_11535,0400000|u_board+057
+w_11536,0400000|u_board+077
+w_11537,0400000|u_board+020
+w_11540,0400000|u_board+024
+w_11541,0400000|u_board+030
+w_11542,0400000|u_board+034
+w_11543,0400000|u_board+020
+w_11544,0400000|u_board+021
+w_11545,0400000|u_board+022
+w_11546,0400000|u_board+023
+w_11547,0400000|u_board+020
+w_11550,0400000|u_board+025
+w_11551,0400000|u_board+032
+w_11552,0400000|u_board+037
+w_11553,0400000|u_board+021
+w_11554,0400000|u_board+025
+w_11555,0400000|u_board+031
+w_11556,0400000|u_board+035
+w_11557,0400000|u_board+022
+w_11560,0400000|u_board+026
+w_11561,0400000|u_board+032
+w_11562,0400000|u_board+036
+w_11563,0400000|u_board+023
+w_11564,0400000|u_board+026
+w_11565,0400000|u_board+031
+w_11566,0400000|u_board+034
+w_11567,0400000|u_board+023
+w_11570,0400000|u_board+027
+w_11571,0400000|u_board+033
+w_11572,0400000|u_board+037
+w_11573,0400000|u_board+024
+w_11574,0400000|u_board+025
+w_11575,0400000|u_board+026
+w_11576,0400000|u_board+027
+w_11577,0400000|u_board+030
+w_11600,0400000|u_board+031
+w_11601,0400000|u_board+032
+w_11602,0400000|u_board+033
+w_11603,0400000|u_board+034
+w_11604,0400000|u_board+035
+w_11605,0400000|u_board+036
+w_11606,0400000|u_board+037
+w_11607,0400000|u_board+040
+w_11610,0400000|u_board+041
+w_11611,0400000|u_board+042
+w_11612,0400000|u_board+043
+w_11613,0400000|u_board+040
+w_11614,0400000|u_board+045
+w_11615,0400000|u_board+052
+w_11616,0400000|u_board+057
+w_11617,0400000|u_board+040
+w_11620,0400000|u_board+044
+w_11621,0400000|u_board+050
+w_11622,0400000|u_board+054
+w_11623,0400000|u_board+041
+w_11624,0400000|u_board+045
+w_11625,0400000|u_board+051
+w_11626,0400000|u_board+055
+w_11627,0400000|u_board+042
+w_11630,0400000|u_board+046
+w_11631,0400000|u_board+052
+w_11632,0400000|u_board+056
+w_11633,0400000|u_board+043
+w_11634,0400000|u_board+046
+w_11635,0400000|u_board+051
+w_11636,0400000|u_board+054
+w_11637,0400000|u_board+043
+w_11640,0400000|u_board+047
+w_11641,0400000|u_board+053
+w_11642,0400000|u_board+057
+w_11643,0400000|u_board+044
+w_11644,0400000|u_board+045
+w_11645,0400000|u_board+046
+w_11646,0400000|u_board+047
+w_11647,0400000|u_board+050
+w_11650,0400000|u_board+051
+w_11651,0400000|u_board+052
+w_11652,0400000|u_board+053
+w_11653,0400000|u_board+054
+w_11654,0400000|u_board+055
+w_11655,0400000|u_board+056
+w_11656,0400000|u_board+057
+w_11657,0400000|u_board+060
+w_11660,0400000|u_board+061
+w_11661,0400000|u_board+062
+w_11662,0400000|u_board+063
+w_11663,0400000|u_board+060
+w_11664,0400000|u_board+064
+w_11665,0400000|u_board+070
+w_11666,0400000|u_board+074
+w_11667,0400000|u_board+013
+w_11670,0400000|u_board+032
+w_11671,0400000|u_board+051
+w_11672,0400000|u_board+070
+w_11673,0400000|u_board+060
+w_11674,0400000|u_board+065
+w_11675,0400000|u_board+072
+w_11676,0400000|u_board+077
+w_11677,0400000|u_board+061
+w_11700,0400000|u_board+065
+w_11701,0400000|u_board+071
+w_11702,0400000|u_board+075
+w_11703,0400000|u_board+062
+w_11704,0400000|u_board+066
+w_11705,0400000|u_board+072
+w_11706,0400000|u_board+076
+w_11707,0400000|u_board+063
+w_11710,0400000|u_board+066
+w_11711,0400000|u_board+071
+w_11712,0400000|u_board+074
+w_11713,0400000|u_board+070
+w_11714,0400000|u_board+071
+w_11715,0400000|u_board+072
+w_11716,0400000|u_board+073
+w_11717,0400000|u_board+012
+w_11720,0400000|u_board+032
+w_11721,0400000|u_board+052
+w_11722,0400000|u_board+072
+w_11723,0400000|u_board+011
+w_11724,0400000|u_board+031
+w_11725,0400000|u_board+051
+w_11726,0400000|u_board+071
+w_11727,0400000|u_board
+w_11730,0400000|u_board+01
+w_11731,0400000|u_board+02
+w_11732,0400000|u_board+03
+w_11733,0400000|u_board
+w_11734,0400000|u_board+04
+w_11735,0400000|u_board+010
+w_11736,0400000|u_board+014
+w_11737,0400000|u_board
+w_11740,0400000|u_board+020
+w_11741,0400000|u_board+040
+w_11742,0400000|u_board+060
+w_11743,0400000|u_board
+w_11744,0400000|u_board+021
+w_11745,0400000|u_board+042
+w_11746,0400000|u_board+063
+w_11747,0400000|u_board
+w_11750,0400000|u_board+024
+w_11751,0400000|u_board+050
+w_11752,0400000|u_board+074
+w_11753,0400000|u_board
+w_11754,0400000|u_board+025
+w_11755,0400000|u_board+052
+w_11756,0400000|u_board+077
+u_plane,0400000|u_board
+w_11760,0400000|u_board+01
+w_11761,0400000|u_board+02
+w_11762,0400000|u_board+03
+w_11763,0400000|u_board+04
+w_11764,0400000|u_board+05
+w_11765,0400000|u_board+06
+w_11766,0400000|u_board+07
+w_11767,0400000|u_board+010
+w_11770,0400000|u_board+011
+w_11771,0400000|u_board+012
+w_11772,0400000|u_board+013
+w_11773,0400000|u_board+014
+w_11774,0400000|u_board+015
+w_11775,0400000|u_board+016
+w_11776,0400000|u_board+017
+w_11777,0400000|u_board+020
+w_12000,0400000|u_board+021
+w_12001,0400000|u_board+022
+w_12002,0400000|u_board+023
+w_12003,0400000|u_board+024
+w_12004,0400000|u_board+025
+w_12005,0400000|u_board+026
+w_12006,0400000|u_board+027
+w_12007,0400000|u_board+030
+w_12010,0400000|u_board+031
+w_12011,0400000|u_board+032
+w_12012,0400000|u_board+033
+w_12013,0400000|u_board+034
+w_12014,0400000|u_board+035
+w_12015,0400000|u_board+036
+w_12016,0400000|u_board+037
+w_12017,0400000|u_board+040
+w_12020,0400000|u_board+041
+w_12021,0400000|u_board+042
+w_12022,0400000|u_board+043
+w_12023,0400000|u_board+044
+w_12024,0400000|u_board+045
+w_12025,0400000|u_board+046
+w_12026,0400000|u_board+047
+w_12027,0400000|u_board+050
+w_12030,0400000|u_board+051
+w_12031,0400000|u_board+052
+w_12032,0400000|u_board+053
+w_12033,0400000|u_board+054
+w_12034,0400000|u_board+055
+w_12035,0400000|u_board+056
+w_12036,0400000|u_board+057
+w_12037,0400000|u_board+060
+w_12040,0400000|u_board+061
+w_12041,0400000|u_board+062
+w_12042,0400000|u_board+063
+w_12043,0400000|u_board+064
+w_12044,0400000|u_board+065
+w_12045,0400000|u_board+066
+w_12046,0400000|u_board+067
+w_12047,0400000|u_board+070
+w_12050,0400000|u_board+071
+w_12051,0400000|u_board+072
+w_12052,0400000|u_board+073
+w_12053,0400000|u_board+074
+w_12054,0400000|u_board+075
+w_12055,0400000|u_board+076
+w_12056,0400000|u_board+077
+w_12057,0400000|u_board+014
+w_12060,0400000|u_board+015
+w_12061,0400000|u_board+016
+w_12062,0400000|u_board+017
+w_12063,0400000|u_board+034
+w_12064,0400000|u_board+035
+w_12065,0400000|u_board+036
+w_12066,0400000|u_board+037
+w_12067,0400000|u_board+054
+w_12070,0400000|u_board+055
+w_12071,0400000|u_board+056
+w_12072,0400000|u_board+057
+w_12073,0400000|u_board+074
+w_12074,0400000|u_board+075
+w_12075,0400000|u_board+076
+w_12076,0400000|u_board+077
+w_12077,0400000|u_board+010
+w_12100,0400000|u_board+011
+w_12101,0400000|u_board+012
+w_12102,0400000|u_board+013
+w_12103,0400000|u_board+030
+w_12104,0400000|u_board+031
+w_12105,0400000|u_board+032
+w_12106,0400000|u_board+033
+w_12107,0400000|u_board+050
+w_12110,0400000|u_board+051
+w_12111,0400000|u_board+052
+w_12112,0400000|u_board+053
+w_12113,0400000|u_board+070
+w_12114,0400000|u_board+071
+w_12115,0400000|u_board+072
+w_12116,0400000|u_board+073
+w_12117,0400000|u_board+04
+w_12120,0400000|u_board+05
+w_12121,0400000|u_board+06
+w_12122,0400000|u_board+07
+w_12123,0400000|u_board+024
+w_12124,0400000|u_board+025
+w_12125,0400000|u_board+026
+w_12126,0400000|u_board+027
+w_12127,0400000|u_board+044
+w_12130,0400000|u_board+045
+w_12131,0400000|u_board+046
+w_12132,0400000|u_board+047
+w_12133,0400000|u_board+064
+w_12134,0400000|u_board+065
+w_12135,0400000|u_board+066
+w_12136,0400000|u_board+067
+w_12137,0400000|u_board
+w_12140,0400000|u_board+01
+w_12141,0400000|u_board+02
+w_12142,0400000|u_board+03
+w_12143,0400000|u_board+020
+w_12144,0400000|u_board+021
+w_12145,0400000|u_board+022
+w_12146,0400000|u_board+023
+w_12147,0400000|u_board+040
+w_12150,0400000|u_board+041
+w_12151,0400000|u_board+042
+w_12152,0400000|u_board+043
+w_12153,0400000|u_board+060
+w_12154,0400000|u_board+061
+w_12155,0400000|u_board+062
+w_12156,0400000|u_board+063
+w_12157,0400000|u_board
+w_12160,0400000|u_board+04
+w_12161,0400000|u_board+010
+w_12162,0400000|u_board+014
+w_12163,0400000|u_board+020
+w_12164,0400000|u_board+024
+w_12165,0400000|u_board+030
+w_12166,0400000|u_board+034
+w_12167,0400000|u_board+040
+w_12170,0400000|u_board+044
+w_12171,0400000|u_board+050
+w_12172,0400000|u_board+054
+w_12173,0400000|u_board+060
+w_12174,0400000|u_board+064
+w_12175,0400000|u_board+070
+w_12176,0400000|u_board+074
+w_12177,0400000|u_board+01
+w_12200,0400000|u_board+05
+w_12201,0400000|u_board+011
+w_12202,0400000|u_board+015
+w_12203,0400000|u_board+021
+w_12204,0400000|u_board+025
+w_12205,0400000|u_board+031
+w_12206,0400000|u_board+035
+w_12207,0400000|u_board+041
+w_12210,0400000|u_board+045
+w_12211,0400000|u_board+051
+w_12212,0400000|u_board+055
+w_12213,0400000|u_board+061
+w_12214,0400000|u_board+065
+w_12215,0400000|u_board+071
+w_12216,0400000|u_board+075
+w_12217,0400000|u_board+02
+w_12220,0400000|u_board+06
+w_12221,0400000|u_board+012
+w_12222,0400000|u_board+016
+w_12223,0400000|u_board+022
+w_12224,0400000|u_board+026
+w_12225,0400000|u_board+032
+w_12226,0400000|u_board+036
+w_12227,0400000|u_board+042
+w_12230,0400000|u_board+046
+w_12231,0400000|u_board+052
+w_12232,0400000|u_board+056
+w_12233,0400000|u_board+062
+w_12234,0400000|u_board+066
+w_12235,0400000|u_board+072
+w_12236,0400000|u_board+076
+w_12237,0400000|u_board+03
+w_12240,0400000|u_board+07
+w_12241,0400000|u_board+013
+w_12242,0400000|u_board+017
+w_12243,0400000|u_board+023
+w_12244,0400000|u_board+027
+w_12245,0400000|u_board+033
+w_12246,0400000|u_board+037
+w_12247,0400000|u_board+043
+w_12250,0400000|u_board+047
+w_12251,0400000|u_board+053
+w_12252,0400000|u_board+057
+w_12253,0400000|u_board+063
+w_12254,0400000|u_board+067
+w_12255,0400000|u_board+073
+w_12256,0400000|u_board+077
+w_12257,0400000|u_board
+w_12260,0400000|u_board+05
+w_12261,0400000|u_board+012
+w_12262,0400000|u_board+017
+w_12263,0400000|u_board+020
+w_12264,0400000|u_board+025
+w_12265,0400000|u_board+032
+w_12266,0400000|u_board+037
+w_12267,0400000|u_board+040
+w_12270,0400000|u_board+045
+w_12271,0400000|u_board+052
+w_12272,0400000|u_board+057
+w_12273,0400000|u_board+060
+w_12274,0400000|u_board+065
+w_12275,0400000|u_board+072
+w_12276,0400000|u_board+077
+w_12277,0400000|u_board+03
+w_12300,0400000|u_board+06
+w_12301,0400000|u_board+011
+w_12302,0400000|u_board+014
+w_12303,0400000|u_board+023
+w_12304,0400000|u_board+026
+w_12305,0400000|u_board+031
+w_12306,0400000|u_board+034
+w_12307,0400000|u_board+042
+w_12310,0400000|u_board+046
+w_12311,0400000|u_board+051
+w_12312,0400000|u_board+054
+w_12313,0400000|u_board+063
+w_12314,0400000|u_board+066
+w_12315,0400000|u_board+071
+w_12316,0400000|u_board+075
+w_12317,0400000|u_board
+w_12320,0400000|u_board+01
+w_12321,0400000|u_board+02
+w_12322,0400000|u_board+03
+w_12323,0400000|u_board+024
+w_12324,0400000|u_board+025
+w_12325,0400000|u_board+026
+w_12326,0400000|u_board+027
+w_12327,0400000|u_board+050
+w_12330,0400000|u_board+051
+w_12331,0400000|u_board+052
+w_12332,0400000|u_board+053
+w_12333,0400000|u_board+074
+w_12334,0400000|u_board+075
+w_12335,0400000|u_board+076
+w_12336,0400000|u_board+077
+w_12337,0400000|u_board+014
+w_12340,0400000|u_board+015
+w_12341,0400000|u_board+016
+w_12342,0400000|u_board+017
+w_12343,0400000|u_board+030
+w_12344,0400000|u_board+031
+w_12345,0400000|u_board+032
+w_12346,0400000|u_board+033
+w_12347,0400000|u_board+044
+w_12350,0400000|u_board+045
+w_12351,0400000|u_board+046
+w_12352,0400000|u_board+047
+w_12353,0400000|u_board+046
+w_12354,0400000|u_board+061
+w_12355,0400000|u_board+062
+w_12356,0400000|u_board+063
+w_12357,0400000|u_board
+w_12360,0400000|u_board+04
+w_12361,0400000|u_board+010
+w_12362,0400000|u_board+014
+w_12363,0400000|u_board+021
+w_12364,0400000|u_board+025
+w_12365,0400000|u_board+031
+w_12366,0400000|u_board+035
+w_12367,0400000|u_board+042
+w_12370,0400000|u_board+046
+w_12371,0400000|u_board+052
+w_12372,0400000|u_board+056
+w_12373,0400000|u_board+063
+w_12374,0400000|u_board+067
+w_12375,0400000|u_board+073
+w_12376,0400000|u_board+077
+w_12377,0400000|u_board+03
+w_12400,0400000|u_board+07
+w_12401,0400000|u_board+013
+w_12402,0400000|u_board+017
+w_12403,0400000|u_board+022
+w_12404,0400000|u_board+026
+w_12405,0400000|u_board+032
+w_12406,0400000|u_board+036
+w_12407,0400000|u_board+041
+w_12410,0400000|u_board+045
+w_12411,0400000|u_board+051
+w_12412,0400000|u_board+055
+w_12413,0400000|u_board+060
+w_12414,0400000|u_board+064
+w_12415,0400000|u_board+070
+w_12416,0400000|u_board+074
+u_pritab,0000000
+w_12420,0000012
+w_12421,0000026
+w_12422,0000000
+w_12423,0000000
+w_12424,0000012
+w_12425,0000024
+w_12426,0000000
+w_12427,0000000
+w_12430,0000036
+w_12431,0000036
+w_12432,0000000
+w_12433,0000000
+w_12434,0000000
+w_12435,0000000
+w_12436,0000000
+w_12437,0000000
+// by hand: the display for the 340 in place of the GRAPHIC-2's lists (ttt2.s:166-244).
+//
+// The list is the 64 cells, u_sbuf, which dsboard writes, then the board's lines and the
+// two buttons, h_stat, ending in the halt.
+// A cell keeps 1970's 16 words, so that the arithmetic from a cell to its words is 1970's.
+// They are its intensity into point mode (noblink or blinkpar), x in point mode, y into
+// parameter mode, the glyph's 12 words (a parameter word with the pen on or off, then 11
+// vectors, the last ending vector mode), and h_cend, the pen off.
+// Every cell has the same modes word for word whatever its glyph, so the 340 can run a
+// cell that dsboard is rewriting and still find each word in the mode it was written for.
+// 1970's blink is the cell's intensity changed between 7 and 1 each h_bper sixtieths, by
+// h_rdpb.
+// The empty cells' dots are the pen's targets, as 1970's lpenb made them.
+
+// The glyphs, 12 words each, 1970's strokes, a vector longer than 127 in two.
+u_ex,   parameter lpoff next(vector)    // ttt2.s:166-177, ex
+        right deltax(0d64) up deltay(0d16)
+        right deltax(0d64) up deltay(0d16) visible
+        right deltax(0d64) up deltay(0d16) visible
+        left deltax(0d96)
+        right deltax(0d64) down deltay(0d32) visible
+        0
+        0
+        0
+        0
+        0
+w_12453,end
+u_oh,   parameter lpoff next(vector)    // ttt2.s:179-191, oh
+        right deltax(0d64) up deltay(0d16)
+        right deltax(0d96) visible
+        right deltax(0d32) up deltay(0d32) visible
+        left deltax(0d96) visible
+        left deltax(0d32) down deltay(0d32) visible
+        0
+        0
+        0
+        0
+        0
+w_12467,end
+u_dot,  parameter lpon next(vector)     // ttt2.s:193-204, dot, the pen's target
+        right deltax(0d64) up deltay(0d16)
+        right deltax(0d64) up deltay(0d16)
+        right deltax(5) visible
+        down deltay(5) visible
+        left deltax(5) visible
+        up deltay(5) visible
+        0
+        0
+        0
+        0
+        end
+
+// The push buttons, 1970's pbsflgs, read into h_pbs.
+// Bit 0 MOVE and bit 7 EXIT come from the pen, held while the last hit on them is under 8
+// sixtieths old, and sense switches 1 to 6 are buttons 0 to 5, held while on (1970 took
+// any button but 7 to make the move, and 7 to stop).
+// A pen hit on a cell's words is left in h_lp, 1970's dspdata+1, for lphit.
+// Each h_bper sixtieths the blinking cells change, bright to dim or back.
+// Asks the time, as getpb did.
+// Has no arguments; sets h_pbs, h_now, h_btk, h_lp, and on a button hit h_pen and h_tpen.
+// AC and IO are clobbered.
+// Called via jda.
+h_rdpb, 0
+        dap h_rpx
+        lac 4
+        and h_m6
+        ral 9s
+        ral 3s                  // switches 1 to 6 to buttons 0 to 5
+        dac h_pbs
+        cal 017                 // sys time, the low word in IO
+        dio h_now
+        lac h_btk
+        cma
+        add h_now               // sixtieths since the last change
+        spa
+        jmp h_rb1               // the clock has wrapped
+        sub h_bper
+        spa
+        jmp h_rp0               // not yet
+h_rb1,  lac h_now
+        dac h_btk
+        lac u_sbufp
+        dac h_p
+        law i 0100
+        dac h_k
+h_rb2,  lac i h_p               // each cell's first word
+        sad u_blinkpar
+        jmp h_rb3
+        sad h_bof
+        jmp h_rb4
+        jmp h_rb5
+h_rb3,  lac h_bof
+        dac i h_p
+        jmp h_rb5
+h_rb4,  lac u_blinkpar
+        dac i h_p
+h_rb5,  lac h_p
+        add h_o20
+        dac h_p
+        isp h_k
+        jmp h_rb2
+h_rp0,  lac 4
+        sma
+        jmp h_rp5               // no pen hit waiting
+        and h_m17
+        dac 4                   // taken
+        lac 5
+        sub u_sbufp
+        spa
+        jmp h_rp1               // before the cells
+        lac 5
+        sub h_cell
+        sma
+        jmp h_rp1               // after them (x - x is +0)
+        lac 5
+        dac h_lp                // a cell's word, for lphit
+        jmp h_rp5
+h_rp1,  lac 5
+        sub h_bta
+        spa
+        jmp h_rp2
+        sub h_o5
+        sma
+        jmp h_rp2
+        lac h_b0                // MOVE, button 0
+        jmp h_rp3
+h_rp2,  lac 5
+        sub h_btb
+        spa
+        jmp h_rp5
+        sub h_o5
+        sma
+        jmp h_rp5
+        lac u_o2000             // EXIT, button 7
+h_rp3,  dac h_pen
+        lac h_now
+        dac h_tpen
+h_rp5,  lac h_tpen
+        cma
+        add h_now               // sixtieths since, +0 when equal
+        spa
+        jmp h_rpx
+        sub h_o7
+        sma sza
+        jmp h_rpx               // 8 sixtieths or more
+        lac h_pbs
+        ior h_pen
+        dac h_pbs
+h_rpx,  jmp .
+
+// sbuf-1, which blk1 and blk2 name before the first move (ttt1.s:13, 222).
+// dsboard and lphit write noblink and blinkpar into it.
+// Not in the list.
+w_12546,0
+
+// The cells (ttt2.s:245, 1050 words there, 1024 and 1970's end mark).
+u_sbuf,
+        .+02000/
+
+// The board's lines and the buttons, after the cells.
+// The lines are 1970's dbuf (ttt2.s:205-244), four planes, each from its corner at x 0 and
+// y 0, 256, 512 or 768, 768 to the right, 255 and 252 up, 767 back and 256 and 252 down
+// to the corner, in vectors of at most 127.
+// Then come the buttons, MOVE and EXIT, pen-sensitive texts in the corner to the right of
+// the lowest plane, each five words, which h_rdpb reads; and the halt.
+h_stat, parameter scale(0) intensity(4) next(point)
+        y(0) next(point)
+        x(0) next(vector)
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d95) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d86) down deltay(0d84) visible end
+        parameter next(point)
+        y(0d256) next(point)
+        x(0) next(vector)
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d95) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d86) down deltay(0d84) visible end
+        parameter next(point)
+        y(0d512) next(point)
+        x(0) next(vector)
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d95) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d86) down deltay(0d84) visible end
+        parameter next(point)
+        y(0d768) next(point)
+        x(0) next(vector)
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d96) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        right deltax(0d85) up deltay(0d84) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d96) visible
+        left deltax(0d95) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d85) down deltay(0d84) visible
+        left deltax(0d86) down deltay(0d84) visible end
+        parameter scale(1) intensity(5) next(parameter)
+h_bt0,  parameter lpon next(point)
+        y(0d56) next(point)
+        x(0d880) next(character)
+        type340 "MOVE"
+h_bt7,  parameter lpon next(point)
+        y(0d16) next(point)
+        x(0d880) next(character)
+        type340 "EXIT"
+        parameter lpoff halt
+u_board,
+        .+0100/
+u_maxin,
+        .+01/
+u_force,
+        .+01/
+u_pri,
+        .+01/
+u_lpri,
+        .+01/
+u_lforce,
+        .+01/
+u_rand,
+        .+01/
+u_lmov,
+        .+01/
+u_dspflg,
+        .+01/
+u_lpadr,
+        .+01/
+u_pbadr,
+        .+01/
+u_blink,
+        .+01/
+u_blk1,
+        .+01/
+u_blk2,
+        .+027/
+x_end,
+0110/
+r_move, jmp 0
+r_must, jmp 0
+r_mark, jmp 0
+r_try,  jmp 0
+r_heur, jmp 0
+r_addpri,jmp 0
+r_11100,jmp 0
+r_dsboard,jmp 0
+r_getc, jmp 0
+r_messg,jmp 0
+r_getpb,jmp 0
+        constants
+start 020000

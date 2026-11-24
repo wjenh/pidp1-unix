@@ -1,0 +1,257 @@
+// The kernel's fifth part, after 1970's s5.s, with access, the open files,
+// the directory slot and the new i-node, and the call's arguments.
+// Bank 0, the window open.
+// Needs unix.ah.
+// The routines that end the call on an error jump to error from inside.
+
+// The loaded i-node's permission against mode, 1 to write or 2 to read
+// (s5.s:19-31).
+// The owner's bits (010, 04) apply to the owner, the others' (02, 01) to
+// the rest, and the super-user has every access.
+// No access is error.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+access, 0
+        dap acX
+        lac uUid
+        spa                 // skip unless the super-user
+        jmp acX
+        lac iFlags
+        dac acF
+        lac uUid
+        sas iUid            // skip if the owner
+        jmp ac1
+        lac acF
+        rar 2s
+        dac acF
+ac1,    lac acF
+        and mode
+        sza i               // skip if allowed
+        jmp error
+acX,    jmp .
+
+// Assign the first free file descriptor to the loaded i-node, open in mode
+// (s5.s:33-60).
+// Exit: a skip, with uAc = the descriptor; no skip when all ten are open.
+// AC and IO are clobbered.
+// Called by jda.
+fassign, 0
+        dap faX
+        dzm faFd
+fa1,    lac faFd
+        jda fget
+        hlt                 // never, since the descriptor is 0 to 9
+        lac fFlags
+        sma                 // skip if open
+        jmp fa2
+        idx faFd
+        sas [NOFILE]        // skip when all are open
+        jmp fa1
+        jmp faX
+fa2,    lac mode
+        xor [FUSED]
+        dac fFlags
+        lac ii
+        dac fI
+        lac faFd
+        dac uAc
+        dzm fBadd
+        jda fput
+        idx faX
+faX,    jmp .
+
+// Copy an open file's three words from uOfiles to fnode (s5.s:67-79).
+// Entry: AC = the file descriptor.
+// Exit: a skip, fgP at its words, for a descriptor 0 to 9; else no skip.
+// AC and IO are clobbered.
+// Called by jda.
+fget,   0
+        dap fgX
+        lac fget
+        spa                 // skip if not negative
+        jmp fgX
+        sub [NOFILE]
+        sma                 // skip if below ten
+        jmp fgX
+        lac fget
+        add fget
+        add fget
+        add [uOfiles]
+        dac fgP
+        dac cpSrc
+        lac [fnode]
+        dac cpDst
+        law FNLEN
+        jda copy
+        idx fgX
+fgX,    jmp .
+
+// Copy fnode back to the place fget took it from (s5.s:84-88).
+// Exit: AC and IO are clobbered.
+// Called by jda.
+fput,   0
+        dap fpX
+        lac [fnode]
+        dac cpSrc
+        lac fgP
+        dac cpDst
+        law FNLEN
+        jda copy
+fpX,    jmp .
+
+// Find the first free entry of the loaded directory, making the directory
+// longer when none is free (s5.s:151-161).
+// Exit: di and dnode the entry.
+// AC and IO are clobbered.
+// Called by jda.
+dslot,  0
+        dap dlX
+        dzm di
+dl1,    lac di
+        jda dget
+        lac dI
+        sza i               // skip if in use
+        jmp dlX
+        idx di
+        jmp dl1
+dlX,    jmp .
+
+// Make a file named name in the loaded directory (s5.s:166-197).
+// It takes a free entry and the first free i-node from FIRSTINUM, with one
+// link, owned by the caller.
+// 1970 searched without a bound, on into the data blocks.
+// Here no free i-node is error.
+// Entry: AC = the permission bits.
+// Exit: the new i-node loaded, ii its i-number.
+// AC and IO are clobbered.
+// Called by jda.
+icreat, 0
+        dap icX
+        lac icreat
+        dac icM
+        jda dslot
+        law FIRSTINUM-1
+        dac icI
+ic1,    idx icI
+        sad [NINODE]        // skip if an i-number is left
+        jmp error
+        jda iget
+        lac iFlags
+        spa                 // skip if free
+        jmp ic1
+        lac ii
+        dac dI
+        lac [name]
+        dac cpSrc
+        lac [dName]
+        dac cpDst
+        law NAMEW
+        jda copy
+        idx sUniq
+        dac dUniq
+        dac iUniq
+        lac icM
+        xor [IUSED]
+        dac iFlags
+        lac uUid
+        dac iUid
+        law i 1             // one link, kept negative
+        dac iNlks
+        dzm iSize
+        lac [iDskps]
+        dac cpDst
+        law NDSKPS
+        jda copyz
+        jda iput
+        jda dput
+icX,    jmp .
+
+// The call's next inline argument, the word at uPc in the caller's bank
+// (s5.s:266-269).
+// Exit: AC = the word; uPc past it.
+// IO is preserved.
+// Called by jda.
+arg,    0
+        dap agX
+        lac uPc
+        ior uBank
+        dac agP
+        idx uPc
+        and [07777]
+        dac uPc
+        lac i agP
+agX,    jmp .
+
+// A user address made a 16-bit pointer into the caller's bank.
+// Entry: AC = the address; its low 12 bits are taken.
+// Exit: AC = the pointer.
+// IO is preserved.
+// Called by jda.
+uptr,   0
+        dap upX
+        lac uptr
+        and [07777]
+        ior uBank
+upX,    jmp .
+
+// The call's next argument names a file in the current directory, whose
+// name is copied to name and looked up (s5.s:276-283).
+// Exit: AC = its i-number; the directory loaded, dnode its entry.
+// Not found is error.
+// IO is clobbered.
+// Called by jda.
+argname, 0
+        dap anX
+        jda arg
+        jda uptr
+        dac cpSrc
+        lac [name]
+        dac cpDst
+        law NAMEW
+        jda copy
+        lac [name]
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp error
+anX,    jmp .
+
+// seek's and tell's arguments, uBase the offset and uLimit whence, with the
+// file descriptor in uAc loaded (s5.s:286-302).
+// Exit: AC = the place whence names, for 0 the start, 1 the offset, else
+// the end.
+// IO is clobbered.
+// Called by jda.
+seektell, 0
+        dap stX
+        jda arg
+        dac uBase
+        jda arg
+        dac uLimit
+        jda finac
+        lac uLimit
+        sza i               // skip unless from the start
+        jmp stX
+        sas [1]             // skip if from the offset
+        jmp st1
+        lac fBadd
+        jmp stX
+st1,    lac iSize
+stX,    jmp .
+
+// The call's next argument names a file the caller owns, or the caller is
+// the super-user (s5.s:307-315).
+// Its i-node is loaded.
+// Else error.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+isown,  0
+        dap ioX
+        jda argname
+        jda iget
+        lac uUid
+        spa                 // skip unless the super-user
+        jmp ioX
+        sas iUid            // skip if the owner
+        jmp error
+ioX,    jmp .

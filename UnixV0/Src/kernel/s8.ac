@@ -1,0 +1,430 @@
+// The kernel's eighth part, after 1970's s8.s, with its data, then the
+// cold start.
+// Bank 0.
+// Needs unix.ah.
+
+// sysdata, the system block's words, read at the cold start and written
+// back when a call changes the free list (s8.s:391-396).
+sysdata,
+sNxfblk, 0                  // the next chain block of free block numbers
+sNfblks, 0                  // the free block numbers in sFblks
+sFblks,
+table NFBLKS
+sUniq,  0                   // the last unique number given an i-node
+sTim,   0                   // the time, high word then low
+        0
+sysdataE,
+assert sysdataE-sysdata == SYSDLEN
+
+// The process table, NPROC entries of PENT words (s8.s:182-208).
+ulist,
+table NPROC*PENT
+ulistE,
+
+// userdata, the running process's state, 1970's layout word for word
+// (s8.s:209-225), with the bank after it in a word 1970 left spare.
+userdata,
+uAc,    0                   // the caller's AC
+uMq,    0                   // the caller's IO, which stands for the MQ
+uRg,
+table 010                   // the program's 010-017, copied by save
+uPc,    0                   // the return address, 12 bits
+uUid,   0
+uPid,   0
+uCdir,  0
+uUlistp, 0                  // the process table entry
+uSwapret, 0
+uBase,  0
+uCount, 0
+uLimit, 0
+uOfiles,
+table NOFILE*FNLEN          // ten open files of three words
+uDspbuf, 0
+uIntflg, 0
+uBank,  0                   // the process's bank, as a 16-bit address base
+uSlot,  0                   // its slot, 0 to 13, which picks its table entry and saved userdata
+uSbit,  0                   // its slot's bit in a sleep word
+uOv,    0                   // the overflow flag to resume with, after a preemption
+uDev,   0                   // a special file's device code, kept across a sleep
+userdata+UDLEN/
+assert uIntflg-userdata == 0d50, "userdata keeps 1970's layout"
+
+// The loaded i-node, its i-number, and the directory entry and open file
+// being worked on (s8.s:441-467).
+ii,     0
+inode,
+iFlags, 0
+iDskps,
+table NDSKPS
+iUid,   0
+iNlks,  0                   // the links, kept negative
+iSize,  0                   // in words
+iUniq,  0
+inodeE,
+assert inodeE-inode == INOSZ
+di,     0                   // the entry's number in its directory
+dnode,
+dI,     0                   // its i-number, 0 when free
+dName,
+table NAMEW
+dUniq,  0
+        0
+        0
+dnodeE,
+assert dnodeE-dnode == DIRSZ
+fnode,
+fFlags, 0                   // FUSED, and FWRITE or FREAD
+fBadd,  0                   // the offset
+fI,     0                   // the i-number
+fnodeE,
+assert fnodeE-fnode == FNLEN
+
+// The call's file name and access mode (s8.s:365, 369).
+name,
+table NAMEW
+mode,   0
+
+// The drum's words, the block in dskbuf, and dskbuf, where every transfer but
+// dskget's goes (s8.s:359, 372).
+dskaddr, 0
+dskbuf,
+table BLKW
+savblk, 0                   // 0 when the system block must be written
+dioWr,  0                   // for dskio, 0 to read, 1 to write
+dsCore, 0                   // for dskio, the 16-bit core address
+// The cache's buffers in bank 1, least recent first (s4.ac, dbuse).
+// Any order of the four serves, so a restart needs no reset.
+dbOrd,  DSKBS
+        DSKBS+DSKBW
+        DSKBS+(2*DSKBW)
+        DSKBS+(3*DSKBW)
+assert NDSKBS == 4, "dbOrd names four buffers"
+
+// The clock (s7.ac's brk).
+ckLast, 0                   // the counter at the last break
+ckMs,   0                   // milliseconds not yet counted into the time
+tkMs,   0                   // and into the ticks
+nTick,  0                   // the 32 ms ticks since the cold start
+nBrk,   0                   // the breaks taken since the cold start
+uquant, 0                   // the ticks the running process has had (s8.s:147)
+bkNow,  0                   // brk's words
+bkD,    0
+bkN,    0
+bkC,    0
+bkK,    0
+bkP,    0
+tpK,    0
+tpS,    0
+tpP,    0
+tpQ,    0
+tpC,    0
+tpN,    0
+tpW,    0
+tdP,    0
+tdN,    0
+wkW,    0
+wkP,    0
+wkN,    0
+
+// The 340 (dsp.ac), the captured list and its holder, 0 when none.
+// The calls change them with breaks off.
+dyLst,  0                   // the list, a 16-bit address
+dyBnk,  0                   // its holder's bank, as a 16-bit address base
+dyWt,   0                   // nonzero while the list waits, stopped, for a tick
+dyTk,   0                   // nTick when the 340 step last saw a tick
+dyP,    0                   // dybrk's words
+dyQ,    0
+dyT,    0
+dyHlt,  D3HALT              // the kernel's empty list, one halt
+
+// The processes (s8.s:158).
+uniqpid, 0                  // the last pid given
+
+// The terminals, NTERM words each (s3.ac, s7.ac), cleared at the cold
+// start.
+// The break routine and the calls share them, and the calls change them
+// with breaks off.
+tTab,
+tCon,
+table NTERM                 // nonzero while a caller is connected
+tEof,
+table NTERM                 // nonzero from a hang-up until a read takes the end of file
+tCnt,
+table NTERM                 // the characters in the input ring
+tIn,
+table NTERM                 // where the break routine puts the next, 0 to QMASK
+tOut,
+table NTERM                 // where the read takes the next
+tRsl,
+table NTERM                 // the readers' sleep word
+tWsl,
+table NTERM                 // the writers' sleep word
+tInt,
+table NTERM                 // the input's i-number once an interrupt key hits, for chkint
+tTabE,
+intAny, 0                   // the terminals marked in tInt
+
+// A DCS2 channel's request block (Docs/UsingDCS2.md, "The Channel Request
+// Block"), for the cold start.
+dcBlk,  0
+        0
+
+// The kernel's working words.
+hltwhy, 0                   // why the machine halted, once its message is out
+hltRsn, 0                   // halt's reason while it types the message
+sysRa,  0                   // the call's 16-bit return address
+sysN,   0                   // the call number
+sysP,   0                   // a 16-bit pointer
+nmPtr,  0                   // for namei, the name's 16-bit pointer
+rwBase, 0                   // for iread and iwrite, the words' 16-bit pointer
+rwCount, 0                  // and their count
+// The routines' private words, each set before use and shared with no
+// other routine except where its header says.
+cpSrc,  0
+cpDst,  0
+cpCnt,  0
+alP,    0
+alB,    0
+dbN,    0
+dbP,    0
+duP,    0
+duQ,    0
+dgtA,   0
+dsT,    0
+dsFa,   0
+dsTry,  0
+acF,    0
+faFd,   0
+fgP,    0
+icM,    0
+icI,    0
+agP,    0
+itN,    0
+itP,    0
+itM,    0
+itQ,    0
+nmN,    0
+nmQ,    0
+igBlk,  0
+igPtr,  0
+ipS,    0
+ipD,    0
+ipN,    0
+dgW,    0
+dgBlk,  0
+dgPtr,  0
+pgN,    0
+pgP,    0
+pgI,    0
+pgD,    0
+rwMode, 0
+rwOff,  0
+rwN,    0
+rwCnt,  0
+rwBlk,  0
+rwP,    0
+rwRun,  0
+stDir,  0
+stNam,  0
+stI,    0
+skPos,  0
+bkBuf,  0
+bkB,    0
+lkA,    0
+lkB,    0
+lkC,    0
+lkT,    0
+svOff,  0
+swN,    0
+swS,    0
+swP,    0
+ckiN,   0
+ckiP,   0
+exP,    0
+exN,    0
+fkP,    0
+fkN,    0
+fkS,    0
+fkK,    0
+fkB,    0
+smP,    0
+smN,    0
+smE,    0
+smQ,    0
+awP,    0
+awN,    0
+awQ,    0
+sbB,    0
+sbN,    0
+dvP,    0
+trK,    0
+trP,    0
+trI,    0
+trC,    0
+twC,    0
+twK,    0
+twP,    0
+twS,    0
+prT,    0
+prN,    0
+prC,    0
+flP,    0
+flW,    0
+csK,    0
+csT,    0
+
+// init's name, two characters a word in nine-bit halves, space padded
+// (s8.s:250-251).
+initf,  0151156             // in
+        0151164             // it
+        0040040
+        0040040
+
+// The cold start, from 0100 (s8.s:337-357), with breaks off until init
+// runs.
+// It types unix on the operator's console and clears bank 1, so the cache
+// is empty.
+// It makes one process, slot 0 in bank 2, pid 1, as uid -1 (the
+// super-user) in directory 3, as 1970's init began (s8.s:209-225).
+// It reads the system block, takes the time from the Chrono-Log and starts
+// the clock.
+// It clears the terminals' words and opens their DCS2 channels, DCS2 reset
+// first.
+// It reads init from the system directory into bank 2 from its 0, frame
+// and all.
+// Then it clears the drum's and the typewriter's completions, turns breaks
+// on, and runs init from its 0.
+// Reached by jmp from 0100.
+coldentry,
+        lsm
+        cbs
+        eem
+        dzm hltwhy
+        dzm dyLst           // no list captured, and the 340 stopped,
+        dzm dyBnk           // whatever ran on it before
+        dzm dyWt
+        lio [dyHlt]
+        d3dla
+        lac [msUnix]
+        jda tmsg
+        lac [DSKBS]
+        dac cpDst
+        lac [BANKW]
+        jda copyz
+// the process table, empty but for slot 0, ready in bank 2, pid 1
+        lac [ulist]
+        dac cpDst
+        law ulistE-ulist
+        jda copyz
+        lac [PREADY+(PBANK0>>014)]
+        dac ulist
+        law 1
+        dac ulist+1
+// userdata, to return to the program's 0 with AC and IO clear
+        lac [userdata]
+        dac cpDst
+        law UDLEN
+        jda copyz
+        law i 1
+        dac uUid
+        law 1
+        dac uPid
+        law ISYS
+        dac uCdir
+        law ulist
+        dac uUlistp
+        law 1
+        dac uIntflg
+        lac [PBANK0]
+        dac uBank
+        lac [SLOTBIT0]
+        dac uSbit
+        law 1
+        dac uniqpid
+        dzm uquant
+// the system block
+        law 1
+        dac savblk
+        dzm dioWr
+        lac [dskbuf]
+        dac dsCore
+        cla
+        jda dskio
+        lac [dskbuf]
+        dac cpSrc
+        lac [sysdata]
+        dac cpDst
+        law SYSDLEN
+        jda copy
+// the time, the system block's overridden by the Chrono-Log's, with the
+// counter's reading the first break's starting point
+        law CLKON
+        cls
+        cltod               // AC = hours, minutes, seconds; IO = month, day, year
+        jda tmset
+        cli
+        rck
+        dio ckLast
+        dzm ckMs
+        dzm tkMs
+        dzm nTick
+        dzm nBrk
+// the terminals
+        lac [tTab]
+        dac cpDst
+        law tTabE-tTab
+        jda copyz
+        dzm intAny
+        lio [scbrst]
+        scb
+        dzm csK
+cs1,    lac csK
+        ior [DCMODE]
+        dac dcBlk
+        lac [DCPORT]
+        dac dcBlk+1
+        lio [scbset+dcBlk]
+        scb
+        dio csT
+        lac csT
+        spa                 // skip unless DCS2 refused
+        jmp cs2
+        idx csK
+        sas [NTERM]
+        jmp cs1
+        jmp cs3
+cs2,    law HDCS
+        jmp halt
+// init
+cs3,
+        lac [initf]
+        dac nmPtr
+        law ISYS
+        jda namei
+        jmp ce1
+        jda iget
+        lac uBank
+        dac rwBase
+        lac [BANKW]
+        dac rwCount
+        cla
+        jda iread
+// cbs clears the typewriter's break from "unix", and with it any a terminal
+// asked for since its channel opened, for a caller who came during the
+// read of init.
+// That channel would hold every later event until an rci that no break
+// would bring, so each channel is polled once here, as the break routine
+// would.
+        cbs
+        dzm csK
+cs4,    lac csK
+        jda tpoll
+        idx csK
+        sas [NTERM]
+        jmp cs4
+        esm
+        jmp sysexit
+ce1,    law HNOINIT
+        jmp halt
+
+assert B1END <= 020000, "bank 1 holds the cache, the saved userdata and the rings"

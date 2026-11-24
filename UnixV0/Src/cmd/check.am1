@@ -1,0 +1,531 @@
+check
+// Translated by as7am1 from the PDP-7 source cmd/check.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, the words of the fixes for sysloc's routines, which the program reached in the
+// kernel's space, and for the alss built from a template.
+h_d2,   2                               // the first i-node block
+h_d5,   5                               // i-nodes in a block
+h_lbp,  u_ldskbuf
+h_bitp, h_bits
+h_p,    0
+h_q,    0
+h_n,    0
+h_bits, 1; 2; 4; 010; 020; 040; 0100; 0200      // 1 shifted left 0 to 15
+        0400; 01000; 02000; 04000; 010000; 020000; 040000; 0100000
+0100/
+        SYSFRAME()
+0117/
+// By hand, no sysloc.
+// The kernel's routines it named are fixed by hand where they are called.
+// The free list's three pointers are set at part2, from the system block.
+w_10000,
+w_10035,dzm u_indircnt
+w_10036,dzm u_icnt
+w_10037,dzm u_licnt
+w_10040,dzm u_blcnt
+w_10041,dzm u_curi
+// By hand, copyz's clear of usetab, 500 words.
+w_10042,law u_usetab
+        dac h_p
+        law i 0764
+        dac h_n
+h_z,    dzm i h_p
+        idx h_p
+        isp h_n                         // -500 counting up
+        jmp h_z
+u_iloop,idx u_curi
+// By hand, the drum's 250 i-numbers, where 1970's had 3400 and more.
+w_10046,law i 0372
+w_10047,add u_curi
+w_10050,sma
+w_10051,jmp u_part2
+w_10052,lac u_curi
+// By hand, iget and copy, the i-node into linode, by h_iget.
+w_10053,jda h_iget
+w_10060,lac u_linode
+w_10061,sma
+w_10062,jmp u_iloop
+w_10063,dac x_ac
+        idx u_icnt
+        sza
+        jmp s_10063
+        lac x_ac
+        jmp w_10065
+s_10063,lac x_ac
+w_10064,lac u_linode
+w_10065,and u_o40
+w_10066,sza
+w_10067,jmp u_iloop
+w_10070,law u_linode+01
+w_10071,dac u_t1
+w_10072,law i 07
+w_10073,dac u_t2
+w_10074,lac i u_t1
+w_10075,sza
+w_10076,jda u_dupcheck
+w_10077,idx u_t1
+        sza i
+        jmp w_10101
+w_10100,idx u_t2
+        sza
+w_10101,jmp w_10074
+w_10102,lac u_linode
+w_10103,and u_o200000
+w_10104,sza i
+w_10105,jmp u_iloop
+w_10106,dac x_ac
+        idx u_licnt
+        sza
+        jmp s_10106
+        lac x_ac
+        jmp w_10110
+s_10106,lac x_ac
+w_10107,law u_linode+01
+w_10110,dac u_t1
+w_10111,law i 07
+w_10112,dac u_t2
+w_10113,lac i u_t1
+w_10114,sza i
+w_10115,jmp w_10136
+// By hand, dskrd and copy, sys rblk into ldskbuf.
+// A block the kernel refuses is passed over, since dupcheck has already called it bad,
+// where 1970's dskrd halted.
+w_10116,cal SYSRBLK
+        u_ldskbuf
+        spa
+        jmp w_10136
+w_10123,dac x_ac
+        idx u_indircnt
+        sza
+        jmp s_10123
+        lac x_ac
+        jmp w_10125
+s_10123,lac x_ac
+w_10124,law u_ldskbuf
+w_10125,dac u_t3
+w_10126,law i 0100
+w_10127,dac u_t4
+w_10130,lac i u_t3
+w_10131,sza
+w_10132,jda u_dupcheck
+w_10133,idx u_t3
+        sza i
+        jmp w_10135
+w_10134,idx u_t4
+        sza
+w_10135,jmp w_10130
+w_10136,idx u_t1
+        sza i
+        jmp w_10140
+w_10137,idx u_t2
+        sza
+w_10140,jmp w_10113
+w_10141,jmp u_iloop
+u_dupcheck,0000000
+        dap r_dupcheck
+        lac u_dupcheck
+w_10143,dac x_ac
+        idx u_blcnt
+        lac x_ac
+// By hand, betwen's test against d709 and d6400, by h_betw.
+w_10144,jda h_betw
+w_10147,jmp u_badadr
+w_10150,dac u_t5
+w_10151,dac x_lnk
+        scr 4s
+w_10152,add u_usetabp
+w_10153,dac u_t6
+w_10154,cla
+w_10155,dac x_lnk
+        rcl 4s
+        swp
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+        swp
+// By hand, 1 shifted left by AC, from h_bits, where 1970 built an alss.
+w_10156,add h_bitp
+        dac h_p
+        lac i h_p
+w_10162,dac u_bit
+w_10163,lac i u_t6
+w_10164,and u_bit
+w_10165,sza
+w_10166,jmp u_dup
+w_10167,lac i u_t6
+w_10170,xor u_bit
+w_10171,dac i u_t6
+w_10172,jmp r_dupcheck
+u_badadr,jda u_print
+w_10174,lac u_d1
+w_10175,cal 05
+w_10176,u_badmes
+w_10177,0000003
+w_10200,jmp r_dupcheck
+u_badmes,0040142
+w_10202,0141144
+w_10203,0162012
+u_dup,  lac u_t5
+w_10205,jda u_print
+w_10206,lac u_d1
+w_10207,cal 05
+w_10210,u_dupmes
+w_10211,0000003
+w_10212,lac u_curi
+w_10213,jda u_print
+w_10214,lac u_d1
+w_10215,cal 05
+w_10216,w_10224
+w_10217,0000001
+w_10220,jmp r_dupcheck
+u_dupmes,0040144
+w_10222,0165160
+w_10223,0000040
+w_10224,0000012
+u_print,0000000
+        dap r_print
+        lac u_print
+w_10226,lia
+w_10227,law u_usetab+0763
+w_10230,dac 010
+w_10231,law i 06
+w_10232,dac u_t6
+w_10233,cla
+w_10234,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_10235,add u_o60
+w_10236,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10237,idx u_t6
+        sza
+w_10240,jmp w_10233
+w_10241,lac u_d1
+w_10242,cal 05
+w_10243,u_prbuf
+w_10244,0000006
+w_10245,jmp r_print
+u_part2,lac u_icnt
+w_10247,jda u_print
+w_10250,lac u_d1
+w_10251,cal 05
+w_10252,u_m3
+w_10253,0000004
+w_10254,lac u_licnt
+w_10255,jda u_print
+w_10256,lac u_d1
+w_10257,cal 05
+w_10260,u_m4
+w_10261,0000004
+w_10262,lac u_indircnt
+w_10263,jda u_print
+w_10264,lac u_d1
+w_10265,cal 05
+w_10266,u_m5
+w_10267,0000004
+w_10270,lac u_blcnt
+w_10271,jda u_print
+w_10272,lac u_d1
+w_10273,cal 05
+w_10274,u_m6
+w_10275,0000004
+w_10276,dzm u_blcnt
+// By hand, the system block into ldskbuf, sys rblk, and the three pointers sysloc gave
+// into the kernel's copy pointed at it.
+        cla
+        cal SYSRBLK
+        u_ldskbuf
+        law u_ldskbuf
+        dac u_nxfblk
+        law u_ldskbuf+1
+        dac u_nfblks
+        law u_ldskbuf+2
+        dac u_fblks
+w_10277,law i 01
+w_10300,add i u_nfblks
+w_10301,cma
+        sub [1]
+w_10302,sma
+w_10303,jmp w_10314
+w_10304,dac u_t1
+w_10305,lac u_fblks
+w_10306,dac u_t2
+w_10307,lac i u_t2
+w_10310,jda u_dupcheck
+w_10311,idx u_t2
+        sza i
+        jmp w_10313
+w_10312,idx u_t1
+        sza
+w_10313,jmp w_10307
+w_10314,lac i u_nxfblk
+w_10315,sza i
+w_10316,jmp u_part3
+w_10317,dac u_t1
+w_10320,jda u_dupcheck
+w_10321,lac u_t1
+// By hand, dskrd and copy, sys rblk into ldskbuf.
+// A chain block the kernel refuses ends the walk, since dupcheck has already called it
+// bad, where 1970's dskrd halted.
+w_10322,cal SYSRBLK
+        u_ldskbuf
+        spa
+        jmp u_part3
+w_10327,law u_ldskbuf
+w_10330,dac u_t1
+w_10331,law i 011
+w_10332,dac u_t2
+w_10333,dac x_ac
+        idx u_t1
+        sza
+        jmp s_10333
+        lac x_ac
+        jmp w_10335
+s_10333,lac x_ac
+w_10334,lac i u_t1
+w_10335,jda u_dupcheck
+w_10336,dac x_ac
+        idx u_t2
+        sza
+        jmp s_10336
+        lac x_ac
+        jmp w_10340
+s_10336,lac x_ac
+w_10337,jmp w_10333
+w_10340,lac u_ldskbuf
+w_10341,jmp w_10315
+u_part3,lac u_blcnt
+w_10343,jda u_print
+w_10344,lac u_d1
+w_10345,cal 05
+w_10346,u_m7
+w_10347,0000004
+w_10350,lac u_d709
+w_10351,dac u_t1
+w_10352,dac x_ac
+        idx u_t1
+        sza
+        jmp s_10352
+        lac x_ac
+        jmp w_10354
+s_10352,lac x_ac
+w_10353,lac u_t1
+w_10354,sad u_d6400
+w_10355,cal 016
+w_10356,dac x_lnk
+        scr 4s
+w_10357,add u_usetabp
+w_10360,dac u_t2
+w_10361,cla
+w_10362,dac x_lnk
+        rcl 4s
+        swp
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+        swp
+// By hand, 1 shifted left by AC, from h_bits, where 1970 built an alss.
+w_10363,add h_bitp
+        dac h_p
+        lac i h_p
+w_10367,dac u_bit
+w_10370,lac i u_t2
+w_10371,and u_bit
+w_10372,sza
+w_10373,jmp w_10352
+w_10374,lac u_t1
+w_10375,jda u_print
+w_10376,lac u_d1
+w_10377,cal 05
+w_10400,u_m8
+w_10401,0000005
+w_10402,jmp w_10352
+
+// h_iget -- by hand, iget and copy, which 1970 called in the kernel through sysloc.
+// Copies i-node AC's 12 words into linode, read with sys rblk into ldskbuf from block
+// 2 + i/5, at word 12 x (i mod 5).
+// Entry: AC = the i-number, 1 to 249.
+// Exit: AC and IO are clobbered.
+// Called via jda.
+h_iget, 0
+        dap h_igx
+        lac h_iget
+        lia
+        cla
+        scl 1s
+        div h_d5
+        jmp .+1                         // an overflow, which cannot happen
+        dio h_p                         // the i-node's place in its block
+        add h_d2
+        cal SYSRBLK
+        u_ldskbuf
+        lac h_p
+        ral 2s
+        dac h_q                         // 4 x the place
+        ral 1s
+        add h_q
+        add h_lbp
+        dac h_p
+        law u_linode
+        dac h_q
+        law i 014
+        dac h_n
+h_ig1,  lac i h_p
+        dac i h_q
+        idx h_p
+        idx h_q
+        isp h_n                         // -12 counting up
+        jmp h_ig1
+h_igx,  jmp .
+
+// h_betw -- by hand, betwen's test against d709 and d6400, which 1970 called in the
+// kernel through sysloc.
+// A skip return when d709 <= AC <= d6400.
+// Entry: AC = a word.
+// AC and IO are preserved.
+// Called via jda.
+h_betw, 0
+        dap h_btx
+        lac h_betw
+        spa                             // a negative word is out of range, -0 too
+        jmp h_bt1
+        sub u_d709
+        spa                             // skip if d709 or more
+        jmp h_bt1
+        lac h_betw
+        sad u_d6400
+        jmp h_bt2
+        sub u_d6400
+        spa                             // skip if past d6400
+        jmp h_bt2
+h_bt1,  lac h_betw
+        jmp h_btx
+h_bt2,  idx h_btx
+        lac h_betw
+h_btx,  jmp .
+u_d1,   0000001
+u_d2,   0000002
+u_d4,   0000004
+u_d5,   0000005
+u_d6,   0000006
+u_d7,   0000007
+u_d8,   0000010
+u_d10,  0000012
+u_o60,  0000060
+u_o400000,0400000
+u_o400001,0400001
+u_o40,  0000040
+u_o200000,0200000
+u_alsscom,dac x_lnk
+// By hand, the drum's bounds, under 1970's names.
+// d709 is the last i-node block, 51 where 1970's was 709.
+// d6400 is the first block past the file system, 1984 where 1970's swap area began at 6400.
+u_d709, 0000063
+u_d6400,0003700
+u_m3,   0000040
+w_10424,0146151
+w_10425,0154145
+w_10426,0163012
+u_m4,   0000040
+w_10430,0154141
+w_10431,0162147
+w_10432,0145012
+u_m5,   0000040
+w_10434,0151156
+w_10435,0144151
+w_10436,0162012
+u_m6,   0000040
+w_10440,0165163
+w_10441,0145144
+w_10442,0000012
+u_m7,   0000040
+w_10444,0146162
+w_10445,0145145
+w_10446,0000012
+u_m8,   0000040
+w_10450,0155151
+w_10451,0163163
+w_10452,0151156
+w_10453,0147012
+u_usetabp,u_usetab
+u_curi, 0000000
+u_bit,  0000000
+u_blcnt,0000000
+u_indircnt,0000000
+u_icnt, 0000000
+u_licnt,0000000
+u_t1,   0000000
+u_t2,   0000000
+u_t3,   0000000
+u_t4,   0000000
+u_t5,   0000000
+u_t6,   0000000
+u_iget, 0000000
+u_nxfblk,0000000
+u_nfblks,0000000
+u_fblks,0000000
+u_copy, 0000000
+u_copyz,0000000
+u_betwen,0000000
+u_dskrd,0000000
+u_ldskbuf,
+        .+0100/
+u_linode,
+        .+014/
+u_usetab,
+        .+0764/
+u_prbuf,
+        .+06/
+x_end,
+0110/
+r_dupcheck,jmp 0
+r_print,jmp 0
+        constants
+start 020000

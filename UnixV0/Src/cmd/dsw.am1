@@ -1,0 +1,87 @@
+dsw
+// Translated by as7am1 from the PDP-7 source cmd/dsw.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0111/
+w_10000,lac u_djmp
+w_10001,dac w_10000
+w_10002,cla
+        dac x_t
+        lat
+        ior x_t
+w_10003,cma
+        sub [1]
+w_10004,add u_d1
+w_10005,dac u_t1
+w_10006,cal 03
+w_10007,u_dd
+w_10010,0000000
+w_10011,lac u_d2
+w_10012,cal 04
+w_10013,u_dir
+w_10014,0000010
+w_10015,sza i
+w_10016,cal 016
+w_10017,lac u_dir
+w_10020,sza i
+w_10021,jmp w_10011
+w_10022,idx u_t1
+        sza
+w_10023,jmp w_10011
+u_wr,   lac u_d1
+w_10025,cal 05
+w_10026,u_dir+01
+w_10027,0000004
+w_10030,lac u_d1
+w_10031,cal 05
+w_10032,u_o12
+w_10033,0000001
+w_10034,cal 01
+u_do,   cal 013
+w_10036,u_dir+01
+w_10037,cal 016
+u_d1,   0000001
+u_d2,   0000002
+u_o12,  0000012
+u_t1,   0000000
+u_djmp, jmp u_do
+u_dd,   0056056
+w_10046,0040040
+w_10047,0040040
+w_10050,0040040
+u_dir,
+        .+010/
+x_end,
+0110/
+        constants
+start 020000

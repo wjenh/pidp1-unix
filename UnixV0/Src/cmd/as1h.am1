@@ -1,0 +1,368 @@
+as1h
+// as1h is as1's seventh overlay, the sixth in the as1x file.
+// It writes the PDP-1 words of the operate instructions, with their reports,
+// as records to the third stream in as1t.
+// See as1.am1, and translate.c's translateOpr and numericCma.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+// PDP-7 operate bits.
+#define OPRCMA  01
+#define OPRCML  02
+#define OPROAS  04
+#define OPRRAL  010
+#define OPRRAR  020
+#define OPRHLT  040
+#define OPRSMA  0100
+#define OPRSZA  0200
+#define OPRSNL  0400
+#define OPRSKP  01000
+#define OPRTWO  02000
+#define OPRCLL  04000
+#define OPRCLA  010000
+
+
+OV/
+// The operate instructions in order; then the EAE instructions' generator.
+        lac [SOPR]
+        jda sopen
+        dzm k
+h1,
+        lac lastk
+        sub k
+        spa                         // skip while k is not past the last word stored
+        jmp h9
+        lac k
+        jda getf
+        dac kf
+        and [KMASK|CMASK]
+        sas [KCODE|COPR]
+        jmp h8
+        dzm nit
+        dzm hask
+        dzm pone
+        lac k
+        jda getv
+        dac kv
+        jmp hgen
+hend,
+        lac hask
+        sza
+        jmp h7
+        lac nit
+        sza
+        jmp h7
+        lac [P_NOP]
+        jda put
+h7,
+        jda emit
+h8,
+        idx k
+        jmp h1
+h9,
+        lac [SOPR]
+        jda sclose
+        lac [OVE]
+        jmp ovload
+
+// An operate instruction.
+// The skip comes first, built on IO or AC; then the operations, in the
+// PDP-7's order.
+// translate.c's translateOpr.
+// Entered by jmp from the loop above with k, kf and kv set; it leaves by jmp
+// hend.
+hgen,
+        lac kf
+        and [0200]                  // MQ live after, so IO is parked around its use
+        dac park
+        lac kv
+        and [OPRSMA|OPRSZA|OPRSNL|OPRSKP]
+        sza i
+        jmp ho5
+        idx hask
+        lac kv
+        and [OPRSNL]
+        sza i
+        jmp ho2
+        lac kv
+        and [OPRSMA|OPRSZA]
+        sza i
+        jmp ho1
+        lac k
+        lio [M_SNLA]
+        jda report
+ho1,
+        jda pkio
+        lac [P_LIO|X_LNK]
+        jda put
+        lac [P_SPI|P_I]
+        dac ska
+        lac [P_SPI]
+        dac ski
+        jmp ho4
+ho2,
+        lac kv
+        and [OPRSMA|OPRSZA]
+        sza
+        jmp ho3
+        lac [P_SMA|P_SPA]
+        dac ska
+        lac [P_SMA|P_SPA|P_I]
+        dac ski
+        jmp ho4a
+ho3,
+        dzm hc
+        lac kv
+        and [OPRSMA]
+        sza
+        lac [P_SMA]
+        dac hc
+        lac kv
+        and [OPRSZA]
+        sza i
+        jmp ho3a
+        lac hc
+        ior [P_SZA]
+        dac hc
+ho3a,
+        lac hc
+        dac ska
+        ior [P_I]
+        dac ski
+ho4,
+        lac kv
+        and [OPRSKP]
+        sza i
+        jmp ho4a
+        lac ska                     // skp inverts the sense
+        lio ski
+        dac ski
+        dio ska
+ho4a,
+        dzm skb
+        dzm skc
+        lac nit
+        dac npre
+        lac kv
+        and [OPRSNL]
+        sza i
+        jmp ho5
+        jda unpk
+
+        // The operations.
+ho5,
+        lac kv
+        and [OPRCLA]
+        sza i
+        jmp ho6
+        lac [P_CLA]
+        jda put
+ho6,
+        lac kv
+        and [OPRCLL]
+        sza i
+        jmp ho7
+        lac [P_DZM|X_LNK]
+        jda put
+ho7,
+        lac kv
+        and [OPRCMA]
+        sza i
+        jmp ho8
+        lac [P_CMA]
+        jda put
+        jda ncma
+        sza i
+        jmp ho8
+        lac [1]
+        dac pone
+        lac [P_SUB]
+        lio [1]
+        jda putl
+ho8,
+        lac kv
+        and [OPRCML]
+        sza i
+        jmp ho9
+        lac [P_DAC|X_T]
+        jda put
+        lac [P_LAC|X_LNK]
+        jda put
+        lac [P_CMA]
+        jda put
+        lac [P_DAC|X_LNK]
+        jda put
+        lac [P_LAC|X_T]
+        jda put
+ho9,
+        lac kv
+        and [OPROAS]
+        sza i
+        jmp ho10
+        lac [P_DAC|X_T]
+        jda put
+        lac [P_LAT]
+        jda put
+        lac [P_IOR|X_T]
+        jda put
+ho10,
+        lac kv
+        and [OPRRAL|OPRRAR]
+        sza i
+        jmp ho12
+        jda pkio
+        lac [P_LIO|X_LNK]
+        jda put
+        law i 1
+        dac hn
+        lac kv
+        and [OPRTWO]
+        sza i
+        jmp ho11
+        law i 2
+        dac hn
+ho11,
+        lac kv
+        and [OPRRAL]
+        sza i
+        jmp ho11a
+        lac [0663001]               // rcl 1s
+        jda put
+        lac [0672001]               // rir 1s
+        jda put
+        jmp ho11b
+ho11a,
+        lac [0662001]               // ril 1s
+        jda put
+        lac [0673001]               // rcr 1s
+        jda put
+ho11b,
+        isp hn
+        jmp ho11
+        lac [P_DIO|X_LNK]
+        jda put
+        jda unpk
+ho12,
+        lac kv
+        and [OPRHLT]
+        sza i
+        jmp hend
+        lac k
+        lio [M_HLT]
+        jda report
+        lac [P_HLT]
+        jda put
+        jmp hend
+
+// pkio puts an item parking IO in x_io, and unpk one taking it back, when
+// MQ is live (park).
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+pkio,   0
+        dap pkiox
+        lac park
+        sza i
+        jmp pkiox
+        lac [P_DIO|X_IO]
+        jda put
+pkiox,  jmp .
+unpk,   0
+        dap unpkx
+        lac park
+        sza i
+        jmp unpkx
+        lac [P_LIO|X_IO]
+        jda put
+unpkx,  jmp .
+
+// 1 when the cma of word k makes a two's complement negative, a number then
+// used as one.
+// The next eight words are read, until one decides.
+// translate.c's numericCma.
+// AC is ignored on entry.
+// Exit: AC = 1 or 0.
+// IO is clobbered.
+// Called via jda.
+ncma,   0
+        dap ncmax
+        lac k
+        dac nb
+        law i 10
+        dac nn
+nc1,
+        idx nb
+        sub nk
+        sma
+        jmp nc9                     // past the program
+        lac nb
+        jda getf
+        dac nf
+        and [KMASK]
+        sas [KCODE]
+        jmp nc9
+        lac nb
+        jda getv
+        dac nv
+        lac nf
+        and [CMASK]
+        sad [CMEM]
+        jmp nc3
+        sad [CLAW]
+        jmp nc0
+        sad [CLIT]
+        jmp nc0
+        sas [COPR]
+        jmp nc9
+        lac nv
+        and [OPRCLA]
+        sza i
+        jmp nc2
+        lac nv
+        and [OPRSMA|OPRSZA]
+        sza i
+        jmp nc0
+nc2,
+        lac nv
+        and [OPRSMA|OPRSZA|OPRCMA|OPRRAL|OPRRAR|OPROAS]
+        sza
+        jmp nc9
+        jmp nc8
+nc3,
+        lac nv
+        and [0740000]
+        sad [OAND]
+        jmp nc0
+        sad [OXOR]
+        jmp nc0
+        sad [OLAC]
+        jmp nc0
+        sad [ODZM]
+        jmp nc8
+        sad [OISZ]
+        jmp nc8
+        jmp nc9
+nc8,
+        isp nn
+        jmp nc1
+nc9,
+        lac [1]
+        jmp ncmax
+nc0,
+        cla
+ncmax,  jmp .
+
+#include "as1gi.ac"
+
+park,   0
+hc,     0
+hn,     0
+nb,     0
+nn,     0
+nf,     0
+nv,     0
+
+        constants
+start 020000

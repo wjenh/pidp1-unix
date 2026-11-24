@@ -1,0 +1,562 @@
+as1f
+// as1f is as1's third overlay, the second in the as1x file.
+// It finds what the flow reaches, and reports the constructs no other
+// report names.
+// See as1.am1.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+#define NPAST   020             // the words past a.out's reported, at most
+
+OV/
+// The flow and the reports; then the liveness's overlay.
+        jda flow
+        jda unseen
+        lac [OVL]
+        jmp ovload
+
+// The successors of code word k, into sl, sn of them.
+// sunk is set for a jump the rules cannot follow.
+// Entry: AC = k, IO = 0 for the flow (a jms also goes past its arguments and
+// to its routine's skip returns), 1 for the liveness (a jms goes into its
+// routine; an indirect jmp through an entry is the entry's returns, given as
+// the entry's index with the sign set).
+// translate.c's successors.
+// AC and IO are clobbered.
+// Called via jda.
+succ,   0
+        dap succx
+        dio smode
+        dzm sn
+        dzm sunk
+        lac succ
+        dac sk
+        jda getf
+        dac sf
+        lac sk
+        jda getv
+        dac kv
+        lac sf
+        and [CMASK]
+        sad [CMEM]
+        jmp sc1
+        sad [COPR]
+        jmp sc20
+        sad [CSYS]
+        jmp sc30
+        sad [CEAE]
+        jmp sc32
+        sad [CIOT]
+        jmp sc12
+        jmp sc11
+
+        // Memory reference.
+sc1,
+        jda tgt
+        lac kv
+        and [0740000]
+        sas [OJMP]
+        jmp sc5
+        lac kv
+        and [020000]
+        sza
+        jmp sc2
+        lac kt
+        spa
+        jmp succx
+        jda sadd
+        jmp succx
+sc2,
+        lac sf
+        and [FREL]
+        sza i
+        jmp sc3
+        lac kt
+        jda isent
+        sza i
+        jmp sc3
+        lac smode
+        sza i
+        jmp succx
+        lac kt
+        ior [0400000]
+        jda sadd
+        jmp succx
+sc3,
+        lac [1]
+        dac sunk
+        jmp succx
+
+        // jms.
+sc5,
+        sas [OJMS]
+        jmp sc10
+        lac kv
+        and [020000]
+        sza
+        jmp sc8
+        lac kt
+        jda isent
+        sza i
+        jmp sc8
+        lac kt
+        add [1]
+        jda sadd
+        lac smode
+        sza
+        jmp succx
+        lac sk
+        jda nargs
+        dac sna
+        lac kt
+        jda getf
+        and [CMASK]
+        sar 9s
+        sar 4s
+        dac snz
+        lac sna
+        dac sj
+sc6,
+        idx sj
+        cma
+        add snz
+        spa
+        jmp sc9
+        lac sk
+        add sj
+        add [1]
+        dac sb
+        jda codel
+        sza i
+        jmp sc6
+        lac sb
+        jda sadd
+        jmp sc6
+sc8,
+        lac [1]
+        dac sunk
+        lac smode
+        sza
+        jmp succx
+        lac sk
+        jda nargs
+        dac sna
+sc9,
+        lac sk
+        add sna
+        add [1]
+        jda sadd
+        jmp succx
+
+        // isz as a count, sad and xct go two ways.
+sc10,
+        sad [OSAD]
+        jmp sc12
+        sad [OXCT]
+        jmp sc12
+        sas [OISZ]
+        jmp sc11
+        lac sf
+        and [FCNT]
+        sza i
+        jmp sc11
+sc12,
+        lac sk
+        add [1]
+        jda sadd
+        lac sk
+        add [2]
+        jda sadd
+        jmp succx
+sc11,
+        lac sk
+        add [1]
+        jda sadd
+        jmp succx
+
+        // Operate.
+        // hlt stops; a skip goes two ways.
+sc20,
+        lac kv
+        and [040]
+        sza
+        jmp succx
+        lac kv
+        and [01700]
+        sza
+        jmp sc12
+        jmp sc11
+
+        // sys goes past its arguments, except exit, which stops.
+sc30,
+        lac kv
+        sad [020016]
+        jmp succx
+sc32,
+        lac sk
+        jda nargs
+        add sk
+        add [1]
+        jda sadd
+succx,  jmp .
+
+// Adds AC to sl, counted in sn.
+// Entry: AC = the successor.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+sadd,   0
+        dap saddx
+        lac sn
+        add [sl]
+        dac sp
+        lac sadd
+        dac i sp
+        idx sn
+saddx,  jmp .
+
+// Marks what is executed.
+// That is every code word and what the flow reaches from them; a data word
+// reached is a negative literal, which loads itself, or an error.
+// Sweeps until no literal is found.
+// translate.c's flow.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+flow,   0
+        dap flowx
+        lac [fpast]
+        dac fpe
+        lac nw
+        sza i
+        jmp flowx
+        cla
+        dac fb
+        jda kind
+        sas [KCODE]
+        jda freach
+fl1,
+        dzm fchg
+        dzm k
+fl2,
+        lac k
+        sub nw
+        sma
+        jmp fl8
+        lac k
+        jda kind
+        sas [KCODE]
+        jmp fl7
+        lio [0]
+        lac k
+        jda succ
+        dzm fj
+fl3,
+        lac fj
+        sub sn
+        sma
+        jmp fl7
+        lac fj
+        add [sl]
+        dac sp
+        lac i sp
+        dac fb
+        spa
+        jmp fl6
+        sub nk
+        sma
+        jmp fl6
+        lac fb
+        jda kind
+        sad [KCODE]
+        jmp fl6
+        jda freach
+fl6,
+        idx fj
+        jmp fl3
+fl7,
+        idx k
+        jmp fl2
+fl8,
+        lac fchg
+        sza
+        jmp fl1
+flowx,  jmp .
+
+// Word fb, not code, reached by the flow, is handled once.
+// A negative literal is made code (fchg set); anything else is an error.
+// Entry: fb = the word; AC is ignored.
+// AC and IO are clobbered.
+// Called via jda.
+freach, 0
+        dap freachx
+        lac fb
+        sub nw
+        spa
+        jmp fr1
+
+        // A word past a.out's is reported once, as long as fpast has room.
+        lac [fpast]
+        dac fpp
+fr0,
+        lac fpp
+        sad fpe
+        jmp fr0a
+        lac i fpp
+        sad fb
+        jmp freachx
+        idx fpp
+        jmp fr0
+fr0a,
+        sad [fpast+NPAST]
+        jmp fr0b
+        lac fb
+        dac i fpp
+        idx fpe
+fr0b,
+        lio [M_REACH]
+        lac fb
+        jda report
+        jmp freachx
+fr1,
+        lac fb
+        jda getf
+        dac frf
+        and [FQ]
+        sza
+        jmp freachx
+        lac frf
+        ior [FQ]
+        dac frf
+        dac i fptr
+        and [KMASK]
+        sas [KDATA]
+        jmp fr3
+        lac frf
+        and [FENT]
+        sza
+        jmp fr2
+        lac fb
+        jda getv
+        and [0760000]
+        sas [0760000]
+        jmp fr2
+        lac frf
+        and [0017777]
+        ior [KCODE|CLIT]
+        dac i fptr
+        lac [1]
+        dac fchg
+        jmp freachx
+fr2,
+        lio [M_DEXEC]
+        lac fb
+        jda report
+        jmp freachx
+fr3,
+        lio [M_REACH]
+        lac fb
+        jda report
+freachx, jmp .
+
+// Reports three constructs the rules translate wrong, which no other report
+// names.
+// They are a small law added to by tad; an instruction on a jms's line; and
+// a routine that returns through its first word and is named by a law or a
+// data word but never called by a direct jms.
+// translate.c's reportUnseen.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+unseen, 0
+        dap unseenx
+
+        // The words a law or a data word names.
+        dzm k
+un1,
+        lac k
+        sub nw
+        sma
+        jmp un3
+        lac k
+        jda getf
+        dac kf
+        and [FREL]
+        sza i
+        jmp un2
+        lac kf
+        and [KMASK]
+        sad [KDATA]
+        jmp un1a
+        lac kf
+        and [KMASK|CMASK]
+        sas [KCODE|CLAW]
+        jmp un2
+un1a,
+        lac k
+        jda getv
+        dac kv
+        jda tgt
+        spa
+        jmp un2
+        lac kt
+        jda getf
+        ior [FNAMED]
+        dac i fptr
+un2,
+        idx k
+        jmp un1
+
+un3,
+        dzm k
+un4,
+        lac k
+        sub nw
+        sma
+        jmp unseenx
+        lac k
+        jda getf
+        dac kf
+        and [KMASK]
+        sas [KCODE]
+        jmp un9
+        lac k
+        jda getv
+        dac kv
+
+        // A small law, then tad.
+        lac kf
+        and [CMASK|FREL]
+        sas [CLAW]
+        jmp un5
+        lac kv
+        and [010000]
+        sza
+        jmp un5
+        lio [OTAD]
+        lac k
+        add [1]
+        jda ismr
+        sza i
+        jmp un5
+        lio [M_LAWT]
+        lac k
+        jda report
+
+        // A jms may have no instruction among its arguments but a
+        // relocatable jmp.
+un5,
+        lio [OJMS]
+        lac k
+        jda ismr
+        sza i
+        jmp un7
+        lac k
+        jda nargs
+        add [1]
+        cma
+        dac unn
+        lac k
+        dac b
+un6,
+        isp unn
+        jmp un6a
+        jmp un7
+un6a,
+        idx b
+        jda getf
+        dac unf
+        and [CMASK]
+        sza i
+        jmp un6
+        sas [CMEM]
+        jmp un6b
+        lac unf
+        and [FREL]
+        sza i
+        jmp un6b
+        lac b
+        jda getv
+        and [0760000]
+        sad [OJMP]
+        jmp un6
+un6b,
+        lio [M_JMSLN]
+        lac b
+        jda report
+        jmp un6
+
+        // A jmp i through a word named but not an entry is a routine never
+        // called by a direct jms.
+un7,
+        lio [OJMP]
+        lac k
+        jda ismr
+        sza i
+        jmp un9
+        lac kv
+        and [020000]
+        sza i
+        jmp un9
+        lac kf
+        and [FREL]
+        sza i
+        jmp un9
+        jda tgt
+        spa
+        jmp un9
+        lac kt
+        jda getf
+        dac unf
+        and [KMASK|FENT|FNAMED|FDONE]
+        sas [KDATA|FNAMED]
+        jmp un9
+        lac kt
+        add [1]
+        jda kind
+        sas [KCODE]
+        jmp un9
+        lac kt
+        jda getf
+        ior [FDONE]
+        dac i fptr
+        lio [M_FIRST]
+        lac kt
+        jda report
+un9,
+        idx k
+        jmp un4
+unseenx, jmp .
+
+// The flow's words.
+k,      0
+kf,     0
+b,      0
+smode,  0
+sn,     0
+sunk,   0
+sk,     0
+sf,     0
+sna,    0
+snz,    0
+sj,     0
+sb,     0
+sp,     0
+sl,                                 // the successors
+        table 020
+fpp,    0
+fpe,    0                           // past fpast's words
+fpast,                              // the words past a.out's reached
+        table NPAST
+fchg,   0
+fj,     0
+fb,     0
+frf,    0
+unn,    0
+unf,    0
+
+#include "as1a.ac"
+
+        constants
+start 020000

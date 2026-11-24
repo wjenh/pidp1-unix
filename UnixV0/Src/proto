@@ -1,0 +1,80 @@
+# The system's drum, in the format of the restorers' build/proto (Tools/v0fs/README.md).
+# It is their tree with the commands added, the users' small text files, and no Unix
+# sources.  Sources are relative to this file's directory as build.sh lays them out.
+# cmd/ holds the assembled programs and fs/ the text files.
+# Every entry has its i-number, so that the restorers' mkfs7 numbers the files alike from
+# the same tree.  The first commands run from 33, the users' files follow, and the later
+# commands take 58 on.  dttt is a link to ttt, the display version, as in the restorers'
+# prototype.  op.s is the PDP-1's copy of 1970's instruction names for as, with rblk and
+# wblk added.  as1 and as1x, its overlays' file, are new.  b and bx are B's two passes, and
+# bop.s and brt.s are the PDP-1's names and B's run time for as.
+# The super-user's uid is written 777777, the word the password file's "777777" gives
+# login, so that stat prints it alike.
+dd           drwr- 777777 4
+    core         frwrw 777777 /dev/null 1
+    system       drwr- 777777 3
+        ttyin    irwr- 777777 6
+        keyboard irwr- 777777 7
+        pptin    irwr- 777777 8
+        ttyout   irwr- 777777 11
+        display  irwr- 777777 12
+        pptout   irwr- 777777 13
+        tty2in   irwr- 777777 17
+        tty2out  irwr- 777777 18
+        tty3in   irwr- 777777 19
+        tty3out  irwr- 777777 20
+        password frw-- 777777 fs/password 33
+        as       frwr- 777777 cmd/as.dmp 58
+        as1      frwr- 777777 cmd/as1.dmp 71
+        as1x     frwr- 777777 cmd/as1x.oct 72
+        b        frwr- 777777 cmd/b.dmp 73
+        bop.s    frwr- 777777 fs/bop.s 75
+        brt.s    frwr- 777777 fs/brt.s 76
+        bx       frwr- 777777 cmd/bx.oct 74
+        cat      frwr- 777777 cmd/cat.dmp 34
+        chmod    frwr- 777777 cmd/chmod.dmp 35
+        chown    frwr- 777777 cmd/chown.dmp 36
+        check    frwr- 777777 cmd/check.dmp 64
+        chrm     frwr- 777777 cmd/chrm.dmp 37
+        cp       frwr- 777777 cmd/cp.dmp 38
+        date     frwr- 777777 cmd/date.dmp 39
+        db       frwr- 777777 cmd/db.dmp 59
+        dsw      frwr- 777777 cmd/dsw.dmp 40
+        ed       frwr- 777777 cmd/ed.dmp 60
+        init     frwr- 777777 cmd/init.dmp 41
+        ln       frwr- 777777 cmd/ln.dmp 42
+        link     l---- -1
+        ls       frwr- 777777 cmd/ls.dmp 43
+        list     l---- -1
+        mv       frwr- 777777 cmd/mv.dmp 44
+        nm       frwr- 777777 cmd/nm.dmp 61
+        od       frwr- 777777 cmd/od.dmp 45
+        op.s     frwr- 777777 fs/op.s 70
+        p        frwr- 777777 cmd/p.dmp 69
+        pd       frwr- 777777 cmd/pd.dmp 46
+        psych    frwr- 777777 cmd/psych.dmp 67
+        rm       frwr- 777777 cmd/rm.dmp 47
+        rn       frwr- 777777 cmd/rn.dmp 48
+        roff     frwr- 777777 cmd/roff.dmp 62
+        salv     frwr- 777777 cmd/salv.dmp 65
+        sh       frwr- 777777 cmd/sh.dmp 49
+        st       frwr- 777777 cmd/st.dmp 66
+        stat     frwr- 777777 cmd/stat.dmp 50
+        ttt      frwr- 777777 cmd/ttt.dmp 68
+        dttt     l---- -1
+        un       frwr- 777777 cmd/un.dmp 63
+    $
+    ken      drwr- 12 51
+        system   l---- 3
+        sys.rc   frwr- 12 fs/sys.rc 52
+        moostat  frwr- 12 fs/moostat 53
+    $
+    dmr      drwr- 14 54
+        system   l---- 3
+        b_readme frwr- 14 fs/b_readme 55
+        hello.b  frwr- 14 fs/hello.b 56
+    $
+    doug     drwr- 15 57
+        system   l---- 3
+    $
+$

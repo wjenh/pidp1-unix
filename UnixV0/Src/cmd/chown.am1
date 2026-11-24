@@ -1,0 +1,128 @@
+chown
+// Translated by as7am1 from the PDP-7 source cmd/chown.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0112/
+w_10000,lac i 07777
+w_10001,sad u_d4
+w_10002,jmp u_error
+w_10003,lac 07777
+w_10004,add u_d4
+w_10005,dac 010
+w_10006,add u_d1
+w_10007,dac u_name
+w_10010,dzm u_octal
+w_10011,dzm u_nchar
+w_10012,law i 010
+w_10013,dac u_c1
+w_10014,lac u_nchar
+w_10015,dzm u_nchar
+w_10016,sza
+w_10017,jmp w_10026
+w_10020,idx 010
+        lac i 010
+w_10021,lia
+w_10022,and u_o177
+w_10023,dac u_nchar
+w_10024,lai
+w_10025,dac x_lnk
+        scr 9s
+w_10026,sad u_o40
+w_10027,jmp w_10037
+w_10030,add u_om60
+w_10031,lia
+w_10032,lac u_octal
+w_10033,dzm x_lnk
+w_10034,ral 3s
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+w_10035,dac x_t
+        lai
+        ior x_t
+w_10036,dac u_octal
+w_10037,idx u_c1
+        sza
+w_10040,jmp w_10014
+u_loop, lac i 07777
+w_10042,sad u_d8
+w_10043,cal 016
+w_10044,add u_dm4
+w_10045,dac i 07777
+w_10046,lac u_name
+w_10047,add u_d4
+w_10050,dac u_name
+w_10051,lac u_octal
+w_10052,cal 023
+u_name, 0000000
+w_10054,sma
+w_10055,jmp u_loop
+w_10056,lac u_name
+w_10057,dac w_10062
+w_10060,lac u_d1
+w_10061,cal 05
+w_10062,0000000
+w_10063,0000004
+w_10064,lac u_d1
+w_10065,cal 05
+w_10066,w_10071
+w_10067,0000002
+w_10070,jmp u_loop
+w_10071,0000040
+w_10072,0077012
+u_error,lac u_d1
+w_10074,cal 05
+w_10075,w_10072
+w_10076,0000001
+w_10077,cal 016
+u_d1,   0000001
+u_d4,   0000004
+u_d8,   0000010
+u_dm4,  0777773
+u_o40,  0000040
+u_o177, 0000177
+u_om60, 0777717
+u_nchar,
+        .+01/
+u_c1,
+        .+01/
+u_octal,
+        .+01/
+x_end,
+0110/
+        constants
+start 020000

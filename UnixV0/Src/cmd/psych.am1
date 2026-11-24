@@ -1,0 +1,833 @@
+psych
+// Translated by as7am1 from the PDP-7 source cmd/psych.s cmd/fop.s
+// for a process bank.
+// Its layout is word 0 the jump to the start, 020-077 the translator's words, 0100-0107
+// the system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+#include "unixsys.ah"
+// by hand: the 340's command words, for the display (psych.s's list, rewritten below)
+#include <TYPE340/type340cmds.ah>
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// by hand: the display's words, from 024
+h_dx,   0       // the segment, as fix gives it
+h_dy,   0
+h_ax,   0       // its length in x and in y
+h_ay,   0
+h_n,    0       // 2^h_n pieces
+h_k,    0       // the pieces, then a count of them up from minus
+h_lim,  0       // 127 * 2^h_n
+h_cx,   0       // x and y summed piece by piece, times 2^h_n
+h_cy,   0
+h_px,   0       // where the pieces have reached in x and y
+h_py,   0
+h_t,    0
+h_t2,   0
+h_p,    0       // the figure's halt, where the next segment's first word goes
+h_q,    0       // the segment's word being written
+h_pbs,  0       // the push buttons, 1970's pbsflgs, bit n for button n
+h_pbi,  0       // the buttons at the last press, 1970's pbsflgs+1; after h_pbs
+h_old,  0       // h_pbs as last read
+h_now,  0       // the time's low word, in sixtieths
+h_tpen, 0       // when the pen last hit a button
+h_pen,  0       // that button's bit
+h_one,  1
+h_o7,   7
+h_m7b,  0177    // a vector's length
+h_vis,  0200000 // a visible vector
+h_dn,   0100000 // a vector down
+h_lf,   0200    // a vector left
+h_end,  0400000 // the last vector, back to parameter mode
+h_m6,   077     // sense switches 1 to 6, in word 4
+h_m17,  0377777
+0100/
+        SYSFRAME()
+0142/
+w_10000,lac u_d1
+w_10001,cal 011
+// by hand: no sysloc; the buttons are h_pbs and h_pbi, made by h_rdpb (psych.s:6-7)
+w_10002,law h_pbs
+w_10004,dac u__pbp
+w_10005,add u_d1
+w_10006,dac u__pbp1
+u_restart,jda u_fld
+w_10010,u_arg1
+w_10011,jda u_fst
+w_10012,u_g
+w_10013,jda u_fld
+w_10014,u_arg2
+w_10015,jda u_fst
+w_10016,u_fact
+w_10017,jda u_fld
+w_10020,u_fp01
+w_10021,jda u_fst
+w_10022,u_d
+w_10023,jda u_capture
+w_10024,law i 0144
+w_10025,dac u_j
+w_10026,jda u_fld
+w_10027,u_fp0
+w_10030,jda u_fst
+w_10031,u_z
+w_10032,jda u_fst
+w_10033,u_oldx
+w_10034,jda u_fst
+w_10035,u_oldy
+// by hand: psych.s:25-31, the list's end marks and its start at the center (setx and
+// sety, 512 and 512), are gone.
+// The 340's start is in the static part (h_lst), and capture has emptied the figure.
+u_loop, cal 017
+w_10046,jda u_fld
+w_10047,u_z
+w_10050,jda u_fad
+w_10051,u_fm110
+w_10052,jda u_fdv
+w_10053,u_radians
+w_10054,jda u_fst
+w_10055,u_b
+w_10056,jda u_fld
+w_10057,u_z
+w_10060,jda u_fad
+w_10061,u_g
+w_10062,jda u_fst
+w_10063,u_z
+w_10064,jda u_fld
+w_10065,u_g
+w_10066,jda u_fng
+w_10067,jda u_fmp
+w_10070,u_fact
+w_10071,jda u_fst
+w_10072,u_g
+w_10073,jda u_fld
+w_10074,u_fp1
+w_10075,jda u_fdv
+w_10076,u_fact
+w_10077,jda u_fst
+w_10100,u_fact
+w_10101,jda u_fld
+w_10102,u_b
+w_10103,jda u_fad
+w_10104,u_fpid2
+w_10105,jda u_sin
+w_10106,jda u_fmp
+w_10107,u_d
+w_10110,jda u_fmp
+w_10111,u_fp500
+w_10112,jda u_fst
+w_10113,u_exex
+w_10114,jda u_in
+w_10115,jmp u_done
+w_10116,jda u_fld
+w_10117,u_b
+w_10120,jda u_sin
+w_10121,jda u_fmp
+w_10122,u_d
+w_10123,jda u_fmp
+w_10124,u_fp500
+w_10125,jda u_fst
+w_10126,u_yy
+w_10127,jda u_in
+w_10130,jmp u_done
+// by hand: the segment from the last point to this one, as fix gives it in x and y,
+// appended to the figure by h_seg as 340 vectors (psych.s:65-83, which wrote two
+// GRAPHIC-2 vector words, each a sign and ten bits, after two end marks).
+w_10134,jda u_fld
+w_10135,u_oldx
+w_10136,jda u_fng
+w_10137,jda u_fad
+w_10140,u_exex
+w_10141,jda u_fix
+        dac h_dx
+w_10146,jda u_fld
+w_10147,u_oldy
+w_10150,jda u_fng
+w_10151,jda u_fad
+w_10152,u_yy
+w_10153,jda u_fix
+        dac h_dy
+        jda h_seg
+w_10160,jda u_fld
+w_10161,u_exex
+w_10162,jda u_fst
+w_10163,u_oldx
+w_10164,jda u_fld
+w_10165,u_yy
+w_10166,jda u_fst
+w_10167,u_oldy
+w_10170,idx u_j
+        sza
+w_10171,sma spa
+w_10172,jmp u_done
+w_10173,jda u_fld
+w_10174,u_g
+w_10175,jda u_fdv
+w_10176,u_fp90000
+w_10177,jda u_fad
+w_10200,u_d
+w_10201,jda u_fst
+w_10202,u_d
+w_10203,jmp u_loop
+// by hand: the count is the word after skp, which psych.s:104 labels 9f; as7 takes that
+// for a name, so 9f in psych.s:99 and 101 named the next 9, the cla at psych.s:146, which
+// the count left 0.
+// That word runs at the second character typed after button 6 (a first other than "a" or
+// a new line).
+// On the PDP-7 it is a bad system call (s3.s:89), where the read's descriptor was to be
+// cleared; on the PDP-1 an instruction it lacks, which halts the machine.
+// The count is u_9f, as the program meant.
+// And first the buttons are read, by h_rdpb.
+// A pen hit left from before the figure is taken here, kept in h_pbi as a press (for auto,
+// as 1970's button break set pbsflgs+1), and is not held when the wait below ends, since
+// the wait is longer than a hit holds.
+// 1970 read the buttons as they were, after the wait.
+u_done, jda h_rdpb
+        law i 01750
+w_10205,dac u_9f
+w_10206,cal 017
+w_10207,dac x_ac
+        idx u_9f
+        sza
+        jmp s_10207
+        lac x_ac
+        jmp w_10211
+s_10207,lac x_ac
+w_10210,jmp w_10206
+w_10211,sma spa
+u_9f,   0000000
+w_10213,dzm u_char
+w_10214,lac u_auto
+w_10215,sza
+w_10216,jmp u_doauto
+// by hand: the buttons read into h_pbs each time round, by h_rdpb, which asks the time
+// as psych.s:110 did.
+w_10217,jda h_rdpb
+w_10220,lac i u__pbp
+w_10221,sza i
+w_10222,jmp w_10217
+w_10223,sma i
+        jmp s_10223
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10225
+s_10223,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10224,jmp w_10340
+w_10225,sma i
+        jmp s_10225
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10227
+s_10225,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10226,jmp w_10336
+w_10227,sma i
+        jmp s_10227
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10231
+s_10227,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10230,jmp w_10322
+w_10231,sma i
+        jmp s_10231
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10233
+s_10231,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10232,jmp w_10320
+w_10233,sma i
+        jmp s_10233
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10235
+s_10233,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10234,jmp w_10311
+w_10235,sma i
+        jmp s_10235
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10237
+s_10235,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10236,jmp w_10314
+w_10237,sma i
+        jmp s_10237
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_10241
+s_10237,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10240,jmp w_10243
+w_10241,jda u_release
+w_10242,cal 016
+w_10243,cla
+w_10244,cal 04
+w_10245,u_tmp
+w_10246,0000001
+w_10247,lac u_tmp
+w_10250,sad u_o141000
+w_10251,sma spa
+w_10252,jmp w_10256
+w_10253,dac u_auto
+w_10254,dzm i u__pbp1
+w_10255,jmp u_doauto
+w_10256,sad u_o12000
+w_10257,jmp u_restart
+w_10260,dzm u_g
+w_10261,cla
+w_10262,cal 04
+w_10263,u_char
+w_10264,0000001
+w_10265,lac u_char
+w_10266,sad u_o12000
+w_10267,jmp w_10300
+w_10270,dac x_lnk
+        scr 9s
+w_10271,dac u_char
+w_10272,lac u_g
+w_10273,dac x_lnk
+        ral 3s
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+w_10274,add u_char
+w_10275,add u_om60
+w_10276,dac u_g
+w_10277,jmp w_10261
+w_10300,lac u_tmp
+w_10301,sad u_o61000
+w_10302,jmp w_10306
+w_10303,lac u_g
+w_10304,dac u_arg2
+w_10305,jmp u_restart
+w_10306,lac u_g
+w_10307,dac u_arg1
+w_10310,jmp u_restart
+w_10311,idx u_fp500
+        sza
+w_10312,nop
+w_10313,jmp u_restart
+w_10314,law i 01
+w_10315,add u_fp500
+w_10316,dac u_fp500
+w_10317,jmp u_restart
+w_10320,lac u_o400000
+w_10321,dac u_char
+w_10322,jda u_fld
+w_10323,u_arg1
+w_10324,jda u_fmp
+w_10325,u_fm056
+w_10326,lac u_char
+w_10327,sma i
+w_10330,jda u_fng
+w_10331,jda u_fad
+w_10332,u_arg1
+w_10333,jda u_fst
+w_10334,u_arg1
+w_10335,jmp u_restart
+w_10336,lac u_o400000
+w_10337,dac u_char
+w_10340,jda u_fld
+w_10341,u_arg2
+w_10342,jda u_fmp
+w_10343,u_fm056
+w_10344,lac u_char
+w_10345,sma i
+w_10346,jda u_fng
+w_10347,jda u_fad
+w_10350,u_arg2
+w_10351,jda u_fst
+w_10352,u_arg2
+w_10353,jmp u_restart
+// by hand: the buttons read first, so that a press since the last figure is in h_pbi
+u_doauto,jda h_rdpb
+        lac i u__pbp1
+w_10355,sma
+w_10356,jmp w_10361
+w_10357,dzm u_auto
+w_10360,jmp u_done
+w_10361,cal 017
+w_10362,dac x_t
+        lai
+        ior x_t
+w_10363,add 00
+w_10364,add u_stick
+w_10365,dzm x_lnk
+w_10366,mul w_10367
+        scr 1s
+        dzm x_lnk
+        jmp w_10370
+w_10367,0231441
+w_10370,rcl 9s
+        swp
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+        swp
+w_10371,dac u_stick
+w_10372,dzm u_aexp
+w_10373,and u_o177777
+w_10374,xor u_o200000
+w_10375,dac u_ams
+w_10376,jda u_fad
+w_10377,u_fmhalf
+w_10400,jda u_fmp
+w_10401,u_fp128
+w_10402,lac u_stick
+w_10403,and u_d1
+w_10404,sza i
+w_10405,jmp w_10411
+w_10406,jda u_fst
+w_10407,u_arg1
+w_10410,jmp u_restart
+w_10411,jda u_fst
+w_10412,u_arg2
+w_10413,jmp u_restart
+u_in,   0000000
+        dap r_in
+        lac u_in
+w_10415,jda u_fix
+w_10416,add u_d500
+w_10417,sma i
+w_10420,jmp r_in
+w_10421,add u_dm1000
+w_10422,sma i
+w_10423,idx r_in
+w_10424,jmp r_in
+u_capture,0000000
+        dap r_capture
+        lac u_capture
+// by hand: the figure emptied, its first word a halt, and the list, from its static
+// part, given to capt (psych.s:248-255, which emptied the GRAPHIC-2 list in buf).
+// The 340 leaves the old figure at once (capt starts the list with dla), so h_seg may
+// write over it.
+        lac h_hlt
+        dac h_fig
+        law h_fig
+        dac h_p
+        law h_lst
+w_10434,cal 027
+w_10435,jmp r_capture
+u_release,0000000
+        dap r_release
+        lac u_release
+w_10437,cal 030
+w_10440,jmp r_release
+u_char, 0000000
+u_stick,0000000
+u_exex, 0000000
+w_10444,0000000
+w_10445,0000000
+u_oldx, 0000000
+w_10447,0000000
+w_10450,0000000
+u_yy,   0000000
+w_10452,0000000
+w_10453,0000000
+u_oldy, 0000000
+w_10455,0000000
+w_10456,0000000
+u_j,    0000000
+u_auto, 0000000
+u_setx, 0143000
+u_sety, 0147000
+u_vecx, 0100000
+u_vecy, 0124000
+u_o775777,0775777
+u_o177777,0177777
+u_o12000,0012000
+u_o61000,0061000
+w_10471,0777717
+u_d1,   0000001
+u_d13,  0000015
+u_d500, 0000764
+u_o141000,0141000
+u_fp128,0000010
+w_10477,0240000
+w_10500,0000000
+u_fmhalf,0000000
+w_10502,0600000
+w_10503,0000000
+u_dm1000,0776027
+u_fact, 0000000
+w_10506,0000000
+w_10507,0000000
+u_g,    0000000
+w_10511,0000000
+w_10512,0000000
+u_z,    0000000
+w_10514,0000000
+w_10515,0000000
+u_b,    0000000
+w_10517,0000000
+w_10520,0000000
+u_d,    0000000
+w_10522,0000000
+w_10523,0000000
+u_radians,0000006
+w_10525,0345136
+w_10526,0000000
+u_fm110,0000007
+w_10530,0734000
+w_10531,0000000
+u_arg1, 0000007
+w_10533,0234167
+w_10534,0000000
+u_arg2, 0000001
+w_10536,0275531
+w_10537,0000000
+u_fp0,  0000000
+w_10541,0000000
+w_10542,0000000
+u_fp01, 0777771
+w_10544,0243656
+w_10545,0000000
+u_fm056,0777773
+w_10547,0745301
+w_10550,0000000
+u_fp500,0000013
+w_10552,0372000
+w_10553,0000000
+u_fp90000,0000021
+w_10555,0257620
+w_10556,0000000
+u__pbp,
+        table 01, 0
+u__pbp1,0000000
+// by hand: fop.s, the floating point package, rewritten for the PDP-1 in fop.ac.
+// Its routines keep the names the translation calls.
+// psych calls neither sfad nor fno, which are left out.
+// Its sin is the table's (FOP_TSIN), for the speed.
+// The first figure takes 2.3 s, not 16.8.
+// The five constants of fop.s that psych.s names follow it, as translated.
+#define FOP_NOSFAD
+#define FOP_NOFNO
+#define FOP_TSIN
+#include "fop.ac"
+u_fp1,  0000001
+w_12136,0200000
+w_12137,0000000
+u_o400000,0400000
+u_o200000,0200000
+u_om60, 0777717
+u_fpid2,0000001
+w_12163,0311037
+w_12164,0552421
+// by hand: the display for the 340 in place of the GRAPHIC-2's list (psych.s:18-83,
+// 247-256).
+//
+// 1970 grew its list in buf while the display ran it, two end marks always written
+// ahead.
+// Here the list is the static part, h_lst (the eight pen buttons and the start at the
+// center), then the figure, h_fig, segment after segment, each a parameter word into
+// vector mode and its vectors, the last of them back to parameter mode, and after the last
+// segment a halt.
+// h_seg writes a segment's words past the halt first and the halt's word last, so the
+// 340, reading the list as it grows, finds either the old halt or a whole segment, never a
+// word half the old and half the new.
+
+// The list's words that the program writes.
+h_hlt,  parameter halt
+h_nxv,  parameter next(vector)
+h_btna, h_bt0           // the first button's first word
+h_pbta, h_pbt
+h_pbt,  0400000         // the buttons' bits, 0 to 7
+        0200000
+        0100000
+        040000
+        020000
+        010000
+        04000
+        02000
+
+// Append the segment h_dx, h_dy, fix's integers, to the figure as 340 vectors.
+// It is drawn in 2^h_n pieces, the fewest whose lengths in x and y are at most 127, each
+// piece the steps between floor(i*h_ax/2^h_n) and the last, so that the pieces add up to
+// the segment exactly and keep to its line.
+// A segment is under 1001 in x and in y (in, psych.s:237), so 8 pieces at most, 9 words
+// with the parameter word.
+// Entry: h_dx, h_dy, and h_p, the figure's halt.
+// Exit: h_p is the new halt.
+// AC and IO are clobbered.
+// Called via jda.
+h_seg,  0
+        dap h_sgx
+        lac h_dx
+        spa
+        cma                     // the length in x, fix's -0 giving +0
+        dac h_ax
+        lac h_dy
+        spa
+        cma
+        dac h_ay
+        dzm h_n
+        lac h_one
+        dac h_k
+        lac h_m7b
+        dac h_lim
+h_sg1,  lac h_lim               // double the pieces until both lengths fit
+        sub h_ax
+        spa
+        jmp h_sg2               // h_ax above h_lim
+        lac h_lim
+        sub h_ay
+        sma
+        jmp h_sg3               // both fit (x - x is +0)
+h_sg2,  idx h_n
+        lac h_k
+        ral 1s
+        dac h_k
+        lac h_lim
+        ral 1s
+        dac h_lim
+        jmp h_sg1
+h_sg3,  lac h_k
+        cma
+        dac h_k                 // -2^h_n, counted up by isp
+        dzm h_cx
+        dzm h_cy
+        dzm h_px
+        dzm h_py
+        lac h_p
+        dac h_q
+h_sg4,  lac h_cy                // the piece in y
+        add h_ay
+        dac h_cy
+        jda h_shr
+        dac h_t
+        sub h_py                // 0 to 127
+        ral 8s
+        ior h_vis
+        dac h_t2
+        lac h_t
+        dac h_py
+        lac h_dy
+        sma
+        jmp h_sg5
+        lac h_t2
+        ior h_dn
+        dac h_t2
+h_sg5,  lac h_cx                // the piece in x
+        add h_ax
+        dac h_cx
+        jda h_shr
+        dac h_t
+        sub h_px
+        ior h_t2
+        dac h_t2
+        lac h_t
+        dac h_px
+        lac h_dx
+        sma
+        jmp h_sg6
+        lac h_t2
+        ior h_lf
+        dac h_t2
+h_sg6,  isp h_k
+        jmp h_sg7
+        lac h_t2                // the last piece ends vector mode
+        ior h_end
+        dac h_t2
+        idx h_q
+        lac h_t2
+        dac i h_q
+        idx h_q
+        lac h_hlt
+        dac i h_q               // the new halt
+        lac h_nxv
+        dac i h_p               // the old halt last, when the segment is whole
+        lac h_q
+        dac h_p
+h_sgx,  jmp .
+h_sg7,  idx h_q
+        lac h_t2
+        dac i h_q
+        jmp h_sg4
+
+// AC, not negative, shifted right h_n places.
+// Entry: AC = the value, h_n the places.
+// Exit: AC = the value shifted.
+// AC is the result, IO is clobbered.
+// Called via jda.
+h_shr,  0
+        dap h_shx
+        lio h_shr
+        lac h_n
+h_sh1,  sza i
+        jmp h_sh2
+        sir 1s
+        sub h_one
+        jmp h_sh1
+h_sh2,  lai
+h_shx,  jmp .
+
+// The push buttons, 1970's pbsflgs, in h_pbs, bit n for button n, from word 4's switches
+// and the pen's hits on the buttons; and h_pbi, 1970's pbsflgs+1, the buttons at the last
+// press.
+// The switches SS1 to SS6 are buttons 0 to 5, each held while it is on.
+// A pen hit on a button's words is taken, its bit and the time kept, and the button counts
+// as held while the last hit is under 8 sixtieths old; the list is redrawn each 32 ms tick,
+// so a pen held on a button hits it about every two.
+// A hit made while the program was busy waits in word 4 and is taken at the next call.
+// A press is a button held now that was not at the last call.
+// Has no arguments; sets h_pbs, h_pbi, h_old, h_now, and on a pen hit h_pen and h_tpen.
+// AC and IO are clobbered.
+// Called via jda.
+h_rdpb, 0
+        dap h_rpx
+        lac 4
+        and h_m6
+        ral 9s
+        ral 3s                  // switches 1 to 6 to buttons 0 to 5
+        dac h_pbs
+        cal 017                 // sys time, the low word in IO
+        dio h_now
+        lac 4
+        sma
+        jmp h_rp5               // no pen hit waiting
+        and h_m17
+        dac 4                   // taken
+        lac 5
+        sub h_btna
+        spa
+        jmp h_rp5               // before the buttons
+        sar 2s
+        dac h_t                 // four words a button
+        sub h_o7                // +0 for the last button, since sub of equals is +0
+        sma sza
+        jmp h_rp5               // after them
+        lac h_t
+        add h_pbta
+        dap h_rp4
+h_rp4,  lac .
+        dac h_pen
+        lac h_now
+        dac h_tpen
+h_rp5,  lac h_tpen
+        cma
+        add h_now               // sixtieths since, +0 when equal
+        spa
+        jmp h_rp6
+        sub h_o7
+        sma sza
+        jmp h_rp6               // 8 sixtieths or more
+        lac h_pbs
+        ior h_pen
+        dac h_pbs
+h_rp6,  lac h_old
+        cma
+        and h_pbs
+        sza i
+        jmp h_rp7               // no button newly held
+        lac h_pbs
+        dac h_pbi
+h_rp7,  lac h_pbs
+        dac h_old
+h_rpx,  jmp .
+
+// The static part, which capt is given.
+// It holds the eight buttons on row 4, below the figure's lowest points, 96 apart from
+// 127, 1970's buttons 0 to 7, each four words, a parameter word turning the pen on, the
+// column, and two words of characters, which the pen hits.
+// Then comes the figure's start at the center, 512 and 512 (psych.s's setx and sety), the
+// pen off, at scale 0, where a vector's step is one point.
+h_lst,  parameter scale(1) intensity(5) next(point)
+        y(0d4) next(parameter)
+h_bt0,  parameter lpon next(point)
+        x(0d127) next(character)
+        type340 "FACT-"
+        parameter lpon next(point)
+        x(0d223) next(character)
+        type340 "FACT+"
+        parameter lpon next(point)
+        x(0d319) next(character)
+        type340 "STEP-"
+        parameter lpon next(point)
+        x(0d415) next(character)
+        type340 "STEP+"
+        parameter lpon next(point)
+        x(0d511) next(character)
+        type340 "BIG  "
+        parameter lpon next(point)
+        x(0d607) next(character)
+        type340 "SMALL"
+        parameter lpon next(point)
+        x(0d703) next(character)
+        type340 "TYPE "
+        parameter lpon next(point)
+        x(0d799) next(character)
+        type340 "EXIT "
+        parameter scale(0) intensity(6) lpoff next(point)
+        y(0d512) next(point)
+        x(0d512) next(parameter)
+// The figure, at most 100 segments of 9 words, and the halt.
+h_fig,  parameter halt
+        table 0d900, 0
+x_end,
+0110/
+r_in,   jmp 0
+r_capture,jmp 0
+r_release,jmp 0
+        constants
+start 020000

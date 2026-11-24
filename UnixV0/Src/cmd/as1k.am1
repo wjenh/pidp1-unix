@@ -1,0 +1,427 @@
+as1k
+// as1k is as1's second overlay, the first in the as1x file.
+// It finds each word's kind and class, the routines' entries and the isz
+// counts.
+// See as1.am1.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+OV/
+// The words' kinds and classes; then the flow's overlay.
+        jda clsfy
+        jda argmk
+        jda entmk
+        jda iszmk
+        lac [OVF]
+        jmp ovload
+
+// The class of the n.out entry at word e.
+// Entry: AC = e.
+// Exit: AC = its class, 0 to 7.
+// IO is clobbered.
+// Called via jda.
+ncl,    0
+        dap nclx
+        lac ncl
+        lio [044]
+        jda udiv
+        add [NCLS]
+        dac nclp
+        dio ncl
+        lac ncl
+        lio [6]
+        jda udiv
+        sub [6]
+        dac ncln
+        lac i nclp
+        dac nclw
+ncl2,
+        isp ncln                    // five less the field, shifts
+        jmp ncl1
+        lac nclw
+        and [7]
+nclx,   jmp .
+ncl1,
+        lac nclw
+        rar 3s
+        dac nclw
+        jmp ncl2
+
+// Each word's kind and class from its record and its first name, and the
+// last word stored.
+// translate.c's classify, its first loop.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+clsfy,  0
+        dap clsfyx
+        law i 1
+        dac lastk
+        dzm k
+        lac [FLAGS]
+        dac kp
+cl1,
+        lac k
+        sub nw
+        sma
+        jmp cl9
+        lio [0]
+        lac k
+        jda getr
+        dac rw0
+        sza i
+        jmp cl5                     // a reserved word
+        lac k
+        dac lastk
+        cla
+        dac kf
+        lac rw0
+        and [RREL]
+        sza i
+        jmp cl2
+        lac [FREL]
+        dac kf
+cl2,
+        lac rw0
+        and [RNAME]
+        sza i
+        jmp cl4
+        lio [1]
+        lac k
+        jda getr
+        and [07777]
+        jda ncl
+        sad [7]
+        jmp cl3
+        jmp cl3b
+cl3,
+        lac rw0
+        and [RONE]
+        sza i
+        jmp cl4
+        law 1
+cl3b,
+        sza i
+        jmp cl4
+        sal 9s
+        sal 4s
+        ior kf
+        ior [KCODE]
+        jmp cl6
+cl4,
+        lac kf
+        ior [KDATA]
+        jmp cl6
+cl5,
+        cla
+cl6,
+        dac i kp
+        idx kp
+        idx k
+        jmp cl1
+
+        // The span past the last word stored, past the final ".".
+cl9,
+        lac lastk
+        add [1]
+        sub nk
+        spa
+        jmp clsfyx
+        add nk
+        dac nk
+clsfyx, jmp .
+
+// Marks the inline arguments.
+// They are the rest of a jms's or a sys's line, and the operand after mul or
+// div.
+// translate.c's classify, its second loop.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+argmk,  0
+        dap argmkx
+        dzm k
+am1,
+        lac k
+        sub nw
+        sma
+        jmp argmkx
+        lac k
+        jda getf
+        dac kf
+        and [KMASK]
+        sas [KCODE]
+        jmp am9
+        lac k
+        jda getv
+        dac kv
+        lac kf
+        and [CMASK]
+        sad [CSYS]
+        jmp am2
+        sad [CMEM]
+        jmp am1a
+        jmp am5
+am1a,
+        lac kv
+        and [0740000]
+        sas [OJMS]
+        jmp am9
+
+        // The words that follow on the same line of the same file.
+am2,
+        lio [0]
+        lac k
+        jda getr
+        and [07777]
+        dac aml
+        lio [1]
+        lac k
+        jda getr
+        and [0770000]
+        dac amf
+        lac k
+        dac b
+am3,
+        idx b
+        sub nw
+        sma
+        jmp am9
+        lio [0]
+        lac b
+        jda getr
+        sza i
+        jmp am9
+        and [07777]
+        sas aml
+        jmp am9
+        lio [1]
+        lac b
+        jda getr
+        and [0770000]
+        sas amf
+        jmp am9
+        lac b
+        jda getf
+        and [0177777]
+        ior [KARG]
+        dac i fptr
+        jmp am3
+
+        // For mul, idiv and div, the next word, which must be stored.
+am5,
+        sas [CEAE]
+        jmp am9
+        lac kv
+        and [0700]
+        sad [0100]
+        jmp am6
+        sas [0300]
+        jmp am9
+am6,
+        lio [0]
+        lac k
+        add [1]
+        jda getr
+        sza
+        jmp am7
+        lio [M_MULOP]
+        lac k
+        jda report
+        jmp am9
+am7,
+        lac k
+        add [1]
+        jda getf
+        and [0177777]
+        ior [KARG]
+        dac i fptr
+am9,
+        idx k
+        jmp am1
+argmkx, jmp .
+
+// The routines' entries, from the direct jms's to them, and the words a direct
+// dac or dzm stores into.
+// translate.c's classify, its third loop.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+entmk,  0
+        dap entmkx
+        dzm k
+em1,
+        lac k
+        sub nw
+        sma
+        jmp entmkx
+        lac k
+        jda getf
+        dac kf
+        and [KMASK|CMASK]
+        sas [KCODE|CMEM]
+        jmp em9
+        lac kf
+        and [FREL]
+        sza i
+        jmp em9
+        lac k
+        jda getv
+        dac kv
+        and [020000]
+        sza
+        jmp em9
+        jda tgt
+        spa
+        jmp em9
+        lac kv
+        and [0740000]
+        sad [ODAC]
+        jmp em2
+        sad [ODZM]
+        jmp em2
+        sas [OJMS]
+        jmp em9
+
+        // A jms's target must be data, a return word.
+        lac kt
+        jda kind
+        sad [KDATA]
+        jmp em3
+        lio [M_JMSNR]
+        lac k
+        jda report
+        jmp em9
+em3,
+        lac kt
+        jda getf
+        ior [FENT]
+        dac i fptr
+        jmp em9
+em2,
+        lac kt
+        jda getf
+        ior [FSTO]
+        dac i fptr
+em9,
+        idx k
+        jmp em1
+entmkx, jmp .
+
+// Marks the isz instructions.
+// Each is of a routine's return word, counted in the entry's class bits, or
+// a count whose skip is kept.
+// translate.c's classify, its last loop.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+iszmk,  0
+        dap iszmkx
+        dzm k
+iz1,
+        lac k
+        sub nw
+        sma
+        jmp iszmkx
+        lio [OISZ]
+        lac k
+        jda ismr
+        sza i
+        jmp iz9
+        lac k
+        jda getf
+        dac kf
+        lac k
+        jda getv
+        dac kv
+        jda tgt
+        lac kf
+        and [FREL]
+        sza i
+        jmp iz3
+        lac kv
+        and [020000]
+        sza
+        jmp iz3
+        lac kt
+        jda isent
+        sza i
+        jmp iz3
+
+        // An isz of a return word is one more skip return.
+        lac kt
+        jda getf
+        dac kf
+        and [CMASK]
+        sad [CMASK]
+        jmp iz9
+        lac kf
+        add [020000]
+        dac i fptr
+        jmp iz9
+
+        // A count unless an indirect jmp follows, the word after next is not
+        // an instruction, or the word is an auto-index register.
+iz3,
+        lac k
+        add [1]
+        jda kind
+        sas [KCODE]
+        jmp iz9
+        lio [OJMP]
+        lac k
+        add [1]
+        jda ismr
+        sza i
+        jmp iz4
+        lac k
+        add [1]
+        jda getv
+        and [020000]
+        sza
+        jmp iz9
+iz4,
+        lac k
+        add [2]
+        jda codel
+        sza i
+        jmp iz9
+        lac kf
+        and [FREL]
+        sza
+        jmp iz5
+        lac kv
+        and [017777]
+        sub [010]
+        spa
+        jmp iz5
+        sub [010]
+        spa
+        jmp iz9
+iz5,
+        lac k
+        jda getf
+        ior [FCNT]
+        dac i fptr
+iz9,
+        idx k
+        jmp iz1
+iszmkx, jmp .
+
+// The classification's words.
+k,      0
+kp,     0
+kf,     0
+b,      0
+rw0,    0
+aml,    0
+amf,    0
+nclp,   0
+ncln,   0
+nclw,   0
+
+#include "as1a.ac"
+
+        constants
+start 020000

@@ -1,0 +1,483 @@
+init
+// Translated by as7am1 from the PDP-7 source cmd/init.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+
+// By hand, the terminals init logs users in on, the kernel's NTERM (unix.ah), at most
+// six.
+// Each has its special files, named in the tables below and made by the drum's
+// prototype (Src/proto).
+#ifndef NTTY
+#define NTTY 4
+#endif
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, the terminal table's words, in the translator's free words from 024.
+h_k,    0                               // a terminal, 0 to NTTY-1
+h_t,    0                               // h_init's terminal
+h_c,    0                               // a child's pid
+h_p,    0                               // a pointer into a table
+h_pid,  0                               // the pid rmes returned
+h_nt,   NTTY
+h_inp,  h_ins
+h_outp, h_outs
+h_pidp, h_pids
+h_ins,  u_ttyin; u_keybd; h_t2i; h_t3i; h_t4i; h_t5i
+h_outs, u_ttyout; u_displ; h_t2o; h_t3o; h_t4o; h_t5o
+h_pids, 0; 0; 0; 0; 0; 0                // each terminal's login, by pid
+// By hand, the login prompt is "\nPDP-1 login: ", where 1970's m1 is "\nlogin: ".
+// Two characters a word, high half first, NULs not sent.
+h_m1,   0000012; 0120104; 0120055; 0061040; 0154157; 0147151; 0156072; 0040000
+0100/
+        SYSFRAME()
+0121/
+w_10000,law i 01
+w_10001,cal 020
+// By hand, 1970's init1 and init2, one routine for each of its two terminals, are
+// h_init over a table of the NTTY terminals' special files.
+        dzm h_k                         // a login on each terminal
+h_all,  lac h_k
+        jda h_init
+        idx h_k
+        sas h_nt
+        jmp h_all
+u_l,    cal 034
+        dac h_pid                       // by hand, whose login sent it
+        dzm h_k
+h_find, lac h_k
+        add h_pidp
+        dac h_p
+        lac i h_p
+        sas h_pid
+        jmp h_next
+        lac h_k                         // that terminal's, so start it again
+        jda h_init
+        jmp u_l
+h_next, idx h_k
+        sas h_nt
+        jmp h_find
+        jmp u_l                         // no login's, so ignored, as 1970's init did
+
+// h_init -- fork terminal k's login.
+// The child opens the terminal's input as file 0 and its output as file 1 and logs a
+// user in; the parent keeps the child's pid as the terminal's, for u_l.
+// Entry: AC = k, 0 to NTTY-1.
+// Exit: AC clobbered, IO kept.
+// Called via jda.
+h_init, 0
+        dap h_ix
+        lac h_init
+        dac h_t
+        cal 035                         // sys fork
+        jmp h_par
+        lac h_t
+        add h_inp
+        dac h_p
+        lac i h_p
+        dac h_oin
+        lac h_t
+        add h_outp
+        dac h_p
+        lac i h_p
+        dac h_oout
+        cal 03                          // sys open; input; 0
+h_oin,  0
+        0
+        cal 03                          // sys open; output; 1
+h_oout, 0
+        1
+        jmp u_login
+h_par,  dac h_c                         // the parent, with the child's pid
+        lac h_t
+        add h_pidp
+        dac h_p
+        lac h_c
+        dac i h_p
+h_ix,   jmp .
+u_login,law i 01
+w_10045,cal 020
+w_10046,cal 03
+w_10047,u_password
+w_10050,0000000
+w_10051,lac u_d1
+w_10052,cal 05
+w_10053,h_m1                            // by hand, the PDP-1 login prompt, h_m1
+w_10054,0000010
+w_10055,jda u_rline
+w_10056,lac u_ebufp
+w_10057,dac u_tal
+w_10060,jda u_gline
+w_10061,law u_o72
+w_10062,dac 010
+w_10063,law u_ibuf+0143
+w_10064,dac 011
+w_10065,idx 010
+        lac i 010
+w_10066,sad u_o12
+w_10067,lac u_o72
+w_10070,dac x_ac
+        idx 011
+        lac x_ac
+        sad i 011
+w_10071,sma spa
+w_10072,jmp w_10060
+w_10073,sad u_o72
+w_10074,sma spa
+w_10075,jmp w_10065
+w_10076,idx 011
+        lac i 011
+w_10077,sad u_o72
+w_10100,jmp w_10124
+w_10101,law i 01
+w_10102,add 011
+w_10103,dac 011
+w_10104,lac u_d1
+w_10105,cal 05
+w_10106,u_m3
+w_10107,0000005
+w_10110,jda u_rline
+w_10111,law u_o72
+w_10112,dac 010
+w_10113,idx 010
+        lac i 010
+w_10114,sad u_o12
+w_10115,lac u_o72
+w_10116,dac x_ac
+        idx 011
+        lac x_ac
+        sad i 011
+w_10117,sma spa
+w_10120,jmp u_error
+w_10121,sad u_o72
+w_10122,sma spa
+w_10123,jmp w_10113
+w_10124,dzm u_nchar
+w_10125,law w_10375
+w_10126,dac 010
+w_10127,idx 011
+        lac i 011
+w_10130,sad u_o72
+w_10131,jmp w_10154
+w_10132,dac u_char
+w_10133,lac u_nchar
+w_10134,sza
+w_10135,jmp w_10144
+w_10136,lac u_char
+w_10137,dac x_lnk
+        ral 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+w_10140,xor u_o40
+w_10141,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10142,dac u_nchar
+w_10143,jmp w_10127
+w_10144,lac 010
+w_10145,dac u_nchar
+w_10146,lac i u_nchar
+w_10147,and u_o777000
+w_10150,xor u_char
+w_10151,dac i u_nchar
+w_10152,dzm u_nchar
+w_10153,jmp w_10127
+w_10154,dzm u_nchar
+w_10155,idx 011
+        lac i 011
+w_10156,sad u_o12
+w_10157,jmp w_10170
+w_10160,add u_om60
+w_10161,lia
+w_10162,lac u_nchar
+w_10163,dzm x_lnk
+w_10164,ral 3s
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+w_10165,dac x_t
+        lai
+        ior x_t
+w_10166,dac u_nchar
+w_10167,jmp w_10155
+w_10170,lac u_nchar
+w_10171,cal 014
+w_10172,cal 021
+w_10173,u_dd
+w_10174,cal 021
+w_10175,u_dir
+w_10176,lac u_d2
+w_10177,cal 011
+w_10200,cal 03
+w_10201,u_sh
+w_10202,0000000
+w_10203,sma
+w_10204,jmp w_10222
+w_10205,cal 012
+w_10206,u_system
+w_10207,u_sh
+w_10210,u_sh
+w_10211,sma i
+w_10212,jmp u_error
+w_10213,cal 03
+w_10214,u_sh
+w_10215,0000000
+w_10216,sma i
+w_10217,jmp u_error
+w_10220,cal 013
+w_10221,u_sh
+w_10222,law 07700
+w_10223,dac 011
+w_10224,law w_10232
+w_10225,dac 010
+        law i 011                       // by hand, boot's nine words counted, since
+        dac h_c                         // its read's address, 0 here, would end the copy
+w_10226,idx 010
+        lac i 010
+w_10227,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+        idx h_c                         // by hand, the count, for the sza
+w_10230,sza
+w_10231,jmp w_10226
+w_10232,jmp 07701
+u_boot, lac u_d2
+w_10234,lia
+w_10235,cal 04
+w_10236,0                               // by hand, the process bank's 0, PDP-7 4096
+w_10237,0007700
+w_10240,lai
+w_10241,cal 011
+w_10242,jmp 00
+w_10243,0000000
+u_rline,0000000
+        dap r_rline
+        lac u_rline
+w_10245,law u_o72
+w_10246,dac 010
+w_10247,cla
+w_10250,cal 04
+w_10251,u_char
+w_10252,0000001
+w_10253,lac u_char
+w_10254,dac x_lnk
+        scr 9s
+w_10255,sad u_o100
+w_10256,jmp w_10245
+w_10257,sad u_o43
+w_10260,jmp w_10265
+w_10261,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10262,sad u_o12
+w_10263,jmp r_rline
+w_10264,jmp w_10247
+w_10265,law u_o72
+w_10266,sad 010
+w_10267,jmp w_10247
+w_10270,law i 01
+w_10271,add 010
+w_10272,dac 010
+w_10273,jmp w_10247
+u_gline,0000000
+        dap r_gline
+        lac u_gline
+w_10275,law u_ibuf+0143
+w_10276,dac 010
+w_10277,jda u_gchar
+w_10300,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10301,sad u_o12
+w_10302,jmp r_gline
+w_10303,jmp w_10277
+u_gchar,0000000
+        dap r_gchar
+        lac u_gchar
+w_10305,lac u_tal
+w_10306,sad u_ebufp
+w_10307,jmp w_10325
+w_10310,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10311,lac i u_tal
+w_10312,lio x_lnk
+        spi
+        jmp w_10314
+w_10313,dac x_lnk
+        scr 9s
+w_10314,and u_o777
+w_10315,lia
+w_10316,lac u_tal
+w_10317,add u_o400000
+w_10320,dac u_tal
+w_10321,lai
+w_10322,sza i
+w_10323,jmp w_10305
+w_10324,jmp r_gchar
+w_10325,lac u_bufp
+w_10326,dac u_tal
+w_10327,dzm i u_tal
+w_10330,dac x_ac
+        idx u_tal
+        sza
+        jmp s_10330
+        lac x_ac
+        jmp w_10332
+s_10330,lac x_ac
+w_10331,lac u_tal
+w_10332,sad u_ebufp
+w_10333,sma spa
+w_10334,jmp w_10327
+w_10335,lac u_bufp
+w_10336,dac u_tal
+w_10337,lac u_d2
+w_10340,cal 04
+w_10341,u_buf
+w_10342,0000100
+w_10343,sza i
+w_10344,jmp u_error
+w_10345,jmp w_10305
+u_error,lac u_d1
+w_10347,cal 05
+w_10350,u_m2
+w_10351,0000002
+w_10352,lac u_d1
+w_10353,cal 033
+w_10354,cal 016
+u_m1,   0000012
+w_10356,0154157
+w_10357,0147151
+w_10360,0156000
+w_10361,0072000
+w_10362,0000040
+u_m2,   0077000
+w_10364,0000012
+u_m3,   0160141
+w_10366,0163163
+w_10367,0167157
+w_10370,0162144
+w_10371,0072040
+u_dd,   0144144
+w_10373,0040040
+w_10374,0040040
+w_10375,0040040
+u_dir,  0040040
+w_10377,0040040
+w_10400,0040040
+w_10401,0040040
+u_ttyin,0164164
+w_10403,0171151
+w_10404,0156040
+w_10405,0040040
+u_ttyout,0164164
+w_10407,0171157
+w_10410,0165164
+w_10411,0040040
+u_keybd,0153145
+w_10413,0171142
+w_10414,0157141
+w_10415,0162144
+u_displ,0144151
+w_10417,0163160
+w_10420,0154141
+w_10421,0171040
+u_sh,   0163150
+w_10423,0040040
+w_10424,0040040
+w_10425,0040040
+u_system,0163171
+w_10427,0163164
+w_10430,0145155
+w_10431,0040040
+u_password,0160141
+w_10433,0163163
+w_10434,0167157
+w_10435,0162144
+// By hand, terminals 2 to 5's special files, for the tables at h_ins and h_outs.
+h_t2i,  0164164; 0171062; 0151156; 0040040     // tty2in
+h_t2o,  0164164; 0171062; 0157165; 0164040     // tty2out
+h_t3i,  0164164; 0171063; 0151156; 0040040     // tty3in
+h_t3o,  0164164; 0171063; 0157165; 0164040     // tty3out
+h_t4i,  0164164; 0171064; 0151156; 0040040     // tty4in
+h_t4o,  0164164; 0171064; 0157165; 0164040     // tty4out
+h_t5i,  0164164; 0171065; 0151156; 0040040     // tty5in
+h_t5o,  0164164; 0171065; 0157165; 0164040     // tty5out
+u_d1,   0000001
+u_o43,  0000043
+u_o100, 0000100
+u_o400000,0400000
+u_d2,   0000002
+u_o12,  0000012
+u_om60, 0777717
+u_d3,   0000003
+u_ebufp,u_char
+u_bufp, u_buf
+u_o777, 0000777
+u_o777000,0777000
+u_o40,  0000040
+u_o72,  0000072
+u_ibuf,
+        .+0144/
+u_obuf,
+        .+0144/
+u_tal,
+        .+01/
+u_buf,
+        .+0100/
+u_char,
+        .+01/
+u_nchar,
+        .+01/
+u_pid1,
+        .+01/
+u_pid2,
+        .+01/
+x_end,
+0110/
+r_init1,jmp 0
+r_init2,jmp 0
+r_rline,jmp 0
+r_gline,jmp 0
+r_gchar,jmp 0
+        constants
+start 020000

@@ -1,0 +1,199 @@
+// Unix kernel definitions for the banks, the process bank's frame, the
+// process table's words, the drum and the file system's sizes, and the
+// halt reasons.
+// Definitions only, included by the kernel and by the drum boot.
+//
+// 23-Nov-2026, Claude: comments cleaned for the release.
+
+#ifndef UNIX_AH
+#define UNIX_AH
+
+#include "../include/unixsys.ah"
+#include <CLOCK/clockdefs.ah>
+#include <DCS/dcs2defs.ah>
+
+// The process slots, one bank each from bank 2.
+#define NPROC     016               // fourteen slots, banks 2 to 017
+#define PBANK0    020000            // slot 0's bank, as a 16-bit address base
+#define BANKBITS  0170000           // the bank in a 16-bit address
+#define BANKW     010000            // a bank's words
+#define SLOTBIT0  0200000           // slot 0's bit in a sleep word; slot s's is this >> s
+
+// Scheduling, the quantum in 32 ms ticks, and whether the break routine
+// preempts a process that has spent it.
+// A trial build may switch preemption off, -DPREEMPT=0.
+#define QUANT     010               // eight ticks, 256 ms
+#ifndef PREEMPT
+#define PREEMPT   1
+#endif
+
+// The message words of a process table entry (s3.s:117-205).
+// The third word is RMWAIT while the process waits in rmes, the sender's
+// pid with MSGIN once a message has come, and the receiver's pid while the
+// process waits in smes.
+// The fourth is the message.
+#define PMSG      2
+#define PMSGW     3
+#define RMWAIT    0777776
+#define MSGIN     0400000
+
+// The terminals are DCS2 server channels 0 to NTERM-1, all on one port,
+// ASCII, telnet, DCS2 echoing, breaking on characters, room again and the
+// connection made or lost.
+// Four by default, at most six.
+#ifndef NTERM
+#define NTERM     4
+#endif
+#if NTERM > 6
+#error "at most six terminals"
+#endif
+#define DCPORT    0d2030
+#define DCMODE    (dcftel+dcfecho+dcfioc+dcfior+dcfie+dcfsrv)
+#define QLEN      0100              // a terminal's input ring, in bank 1
+#define QMASK     077
+#define CHESC     033               // the interrupt keys, ESC and ctrl-C
+#define CHETX     003
+#define CHEOT     004               // ctrl-D, end of file (s3.s:375-381)
+
+// The device switch (s3.s:224-229), indexed by i-number.
+// An entry is a terminal's input or output with its number, or the paper
+// tape reader or punch.
+#define DVTABN    041               // i-numbers 0 to 32
+#define DVKIND    0700
+#define DVTERM    07
+#define DVTIN     0100
+#define DVTOUT    0200
+#define DVPTR     0300
+#define DVPTP     0400
+
+// The paper tape reader's end of tape is no character for this long.
+#define PTRWAIT   0d2000            // ms
+
+// The paper tape punch's longest wait for it to be free before a character
+// is given to it anyway.
+#define PTPWAIT   0d1000            // ms
+
+// The system call frame at 0100-0107 of every process bank (unixsys.ah).
+#define FRAME     0100              // the caller's AC, stored by cal
+#define FRLEM     0104              // the kernel returns here, window open
+#define FRPC      0106              // the return address, 12 bits
+
+// The process table, four words an entry.
+// The first holds the status in bits 0-2 and the bank's number in bits
+// 14-17, the second the pid.
+#define PENT      4
+#define PSTAT     0700000
+#define PREADY    0100000           // status 1, ready
+#define PNREADY   0200000           // status 2, not ready
+
+// userdata, the running process's 64 words in bank 0.
+#define UDLEN     0100
+#define NOFILE    012               // ten open files of three words
+#define FNLEN     3
+
+// sysdata, the system block's words (s8.s:391-396).
+#define SYSDLEN   017
+#define NFBLKS    012               // the free block numbers it holds
+
+// On the drum, block b is slot b mod 64 of field b / 64, and slot s of a
+// field lies at word 64 x ((s x INTERLEAVE) mod 64), as Tools/v0fs lays it
+// down.
+// 27 is the fewest slots apart that the kernel keeps up with on 64-word
+// reads with its breaks running, as measured.
+// Without the breaks it would be 25, since the drum's end of transfer break
+// costs 40 drum words of the margin.
+// A trial build may give another, -DINTERLEAVE=0n.
+#ifndef INTERLEAVE
+#define INTERLEAVE 033              // 27; must match v0fs's INTERLEAVE
+#endif
+#define BLKW      0100              // a block's words
+#define FSFIRST   2                 // the first block dskrd and dskwr accept
+#define FSLAST    03677             // 1983, the last file system block
+#define FIELDBITS 0370000           // the field in dia's and dwc's IO
+#define DRTRIES   012               // ten tries a transfer (s4.s:773)
+#define DRERR     0400000           // dra's error bit
+#define KFIELD    0370000           // field 31, the kernel's image, in dia's and dwc's IO
+
+// The Type 23 drum's IOTs (Docs/UsingType23Drum.md), named here rather than
+// from the library's header, whose dra the Type 340's header shares.
+#define dia       iot 61
+#define dwc       iot 62
+#define dcl       iot 63
+#define t23dra    iot 2062
+#define DRMRD     0400000           // in dia's IO, read
+#define DRMWRT    0400000           // in dwc's IO, write
+#define CKSDRM    1                 // in cks's IO, the drum is busy
+
+// The Type 340's IOTs, named here rather than from type340defs.ah, whose dra
+// the drum's header shares.
+#define d3dla     iot 15            // start the list at the 16-bit address in IO
+#define d3drs     iot 115           // resume after a pen hit
+#define d3dcf     iot 215           // clear the 340's flags
+#define d3dra     iot 16            // IO = the address counter, one past the word fetched
+#define d3drc     iot 116           // IO = the pen hit's x in bits 0-8, y in 9-17, each halved
+#define d3dsp     iot 117           // skip on a pen hit
+#define d3dstp    iot 1617          // dss dsv dsh, skip on a stop or an edge violation
+#define D3HALT    02000             // a parameter word that halts, no interrupt
+#define DSWORD    4                 // a process bank's display words, 4 to 7
+#define DSHIT     0400000           // word 4's bit 0, set when a pen hit is waiting
+
+// The cache, in bank 1, four buffers of a block number and its 64 words.
+#define NDSKBS    4
+#define DSKBW     0101
+#define DSKBS     010000            // 1:0
+#define DSKBSE    (DSKBS+(NDSKBS*DSKBW))
+
+// Bank 1 after the cache holds each slot's saved userdata, then each
+// terminal's input ring.
+#define UDSAVE    DSKBSE
+#define TQBASE    (UDSAVE+(NPROC*UDLEN))
+#define B1END     (TQBASE+(NTERM*QLEN))
+
+// The i-node and the directory entry (s8.s:441-467).
+#define INODEB    2                 // the first i-node block
+#define INOPB     5                 // i-nodes a block
+#define INOSZ     014               // an i-node's words
+#define NINODE    0372              // 250 i-numbers, 0 to 249
+#define FIRSTINUM 041               // icreat's first, 33, since those below are fixed
+#define NDSKPS    7                 // block numbers in an i-node
+#define MAXSIZE   070000            // a file's largest size, 28,672 words
+#define DIRSZ     010               // a directory entry's words
+#define NAMEW     4                 // a name's words
+#define IUSED     0400000           // i-node flags
+#define ILARGE    0200000
+#define ISPEC     040
+#define IDIR      020
+#define IMODE     017               // the four permission bits
+#define FUSED     0400000           // an open file's flags
+#define FWRITE    1                 // and the access modes
+#define FREAD     2
+
+// The fixed i-numbers (s3.s:225-229).
+#define ICORE     1
+#define ISYS      3
+#define IDD       4
+
+// The clock, the BBN clock's counter and its 32 ms break, and the
+// Chrono-Log's time of day.
+#define CLKON     (clsena+clsims)   // for cls, the clock counting and the 32 ms break on
+#define CLKWRAP   0d60000           // the counter runs 0 to 59999 ms
+#define MS3       0d50              // the milliseconds of three sixtieths
+#define TICKMS    0d32              // a tick, the quantum's unit
+#define cltod     iot 70            // the Chrono-Log (Docs/UsingTheChronologClock.md)
+
+// The typewriter's stop code, which ends a text message, and its lower case.
+#define TSTOP     013
+#define TLOWER    072
+
+// The reasons for a halt, left in hltwhy once its message is typed.
+#define HEXIT     1                 // the last process exited
+#define HBADBK    2                 // a system call from a bank not the running process's
+                                    // 3 unused
+#define HDISK     4                 // out of disk (s4.s:423)
+#define HDRUM     5                 // ten drum errors (s4.s:801)
+#define HBLOCK    6                 // a block number outside the file system (s4.s:707)
+#define HBIG      7                 // a file too big (s6.s:557)
+#define HNOINIT   010               // no init in the system directory (s8.s:352)
+#define HDCS      011               // DCS2 would not open the terminals' channels
+
+#endif

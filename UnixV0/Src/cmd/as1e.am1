@@ -1,0 +1,485 @@
+as1e
+// as1e is as1's eighth overlay, the seventh in the as1x file.
+// It writes the PDP-1 words of the EAE instructions, with their reports, as
+// records to the fourth stream in as1t.
+// See as1.am1, and translate.c's translateEae, fillLines and shiftLines.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+// PDP-7 EAE bits and the three instructions kept.
+#define EAESIGN 020000
+#define EAECLMQ 010000
+#define EAEABS  004000
+#define EAEMQAC 002000
+#define EAECLAC 001000
+#define EAEMUL  0653122
+#define EAEIDIV 0653323
+#define EAEDIV  0640323
+
+
+OV/
+// The EAE instructions in order; then the sizes' and literals' overlay.
+        lac [SEAE]
+        jda sopen
+        dzm k
+e1,
+        lac lastk
+        sub k
+        spa                         // skip while k is not past the last word stored
+        jmp e9
+        lac k
+        jda getf
+        dac kf
+        and [KMASK|CMASK]
+        sas [KCODE|CEAE]
+        jmp e8
+        dzm nit
+        dzm hask
+        dzm pone
+        lac k
+        jda getv
+        dac kv
+        jmp egen
+hend,
+        lac hask
+        sza
+        jmp e7
+        lac nit
+        sza
+        jmp e7
+        lac [P_NOP]
+        jda put
+e7,
+        jda emit
+e8,
+        idx k
+        jmp e1
+e9,
+        lac [SEAE]
+        jda sclose
+        lac [OVP]
+        jmp ovload
+
+// An EAE instruction.
+// mul, idiv and div take their operands; the shifts get their fills; then
+// the setups.
+// translate.c's translateEae.
+// Entered by jmp from the loop above with k, kf and kv set; it leaves by jmp
+// hend.
+egen,
+        lac kv
+        and [0700]
+        dac hc
+        lac kv
+        and [077]
+        dac hn
+        lac hc
+        sad [0100]
+        jmp he1
+        sas [0300]
+        jmp he10
+
+        // A multiply or a divide, its operand the next word.
+he1,
+        lac k
+        add [1]
+        dac nb
+        sub nk
+        sma
+        jmp he2
+        lio [0]
+        lac nb
+        jda getr
+        sza i
+        jmp he2
+        lac nb
+        jda getv
+        sma
+        jmp he2
+        lac k
+        lio [M_EAEO]
+        jda report
+he2,
+        lac nb
+        jda mapa
+        lac kv
+        sas [EAEMUL]
+        jmp he3
+        lac [P_MUL]
+        jda putop
+        lac [0677001]               // scr 1s
+        jda put
+        jmp he6
+he3,
+        sad [EAEIDIV]
+        jmp he4
+        sas [EAEDIV]
+        jmp he5
+        jmp he4a
+he4,
+        lac [P_LIA]
+        jda put
+        lac [P_CLA]
+        jda put
+he4a,
+        lac [0667001]               // scl 1s
+        jda put
+        lac [P_DIV]
+        jda putop
+        dzm itc
+        lac [P_JMP]
+        lio [TDOT2]
+        jda putb
+        lac [P_SWP]
+        jda put
+        jmp he6
+he5,
+        lac k
+        lio [M_EAEM]
+        jda report
+he6,
+        lac kf
+        and [0400]                  // the link live after
+        sza i
+        jmp he7
+        lac [P_DZM|X_LNK]
+        jda put
+he7,
+        lac k
+        add [2]
+        jda mapa
+        lac [P_JMP]
+        jda putop
+        jmp hend
+
+        // The rest, the setup bits first.
+he10,
+        lac kv
+        and [EAEABS]
+        sza i
+        jmp he11
+        lac k
+        lio [M_EAEA]
+        jda report
+he11,
+        lac kv
+        and [EAESIGN]
+        sza i
+        jmp he12
+        lac [P_DAC|X_LNK]
+        jda put
+he12,
+        lac kv
+        and [EAECLMQ|EAEMQAC]
+        sas [EAECLMQ]
+        jmp he13
+        lac [P_CLI]
+        jda put
+he13,
+        lac kv
+        and [EAEMQAC]
+        sza i
+        jmp he15
+        lac kv
+        and [EAECLMQ]
+        sza i
+        jmp he14
+        lac [P_LIA]
+        jda put
+        jmp he15
+he14,
+        lac [P_DAC|X_T]
+        jda put
+        lac [P_LAI]
+        jda put
+        lac [P_IOR|X_T]
+        jda put
+        lac [P_LIA]
+        jda put
+        lac [P_LAC|X_T]
+        jda put
+he15,
+        lac kv
+        and [EAECLAC]
+        sza i
+        jmp he16
+        lac hc
+        sza
+        jmp he15a
+        lac hn
+        and [02]
+        sza
+        jmp he16
+he15a,
+        lac [P_CLA]
+        jda put
+he16,
+        lac hc
+        sza i
+        jmp he20
+        sad [0500]
+        jmp he30
+        sad [0600]
+        jmp he40
+        sad [0700]
+        jmp he50
+        lac k
+        lio [M_NORM]
+        jda report
+        jmp hend
+
+        // Code 0 works on MQ and AC.
+he20,
+        lac hn
+        and [06]
+        sas [06]
+        jmp he21
+        lac k
+        lio [M_CMOR]
+        jda report
+he21,
+        lac hn
+        and [01]
+        sza i
+        jmp he22
+        lac k
+        lio [M_EAES]
+        jda report
+he22,
+        lac hn
+        and [070]
+        sza i
+        jmp he23
+        lac k
+        lio [M_EAEU]
+        jda report
+he23,
+        lac hn
+        and [02]
+        sza i
+        jmp he25
+        lac kv
+        and [EAECLAC]
+        sza i
+        jmp he24
+        lac [P_LAI]
+        jda put
+        jmp he25
+he24,
+        lac [P_DAC|X_T]
+        jda put
+        lac [P_LAI]
+        jda put
+        lac [P_IOR|X_T]
+        jda put
+he25,
+        lac hn
+        and [04]
+        sza i
+        jmp hend
+        lac [P_SWP]
+        jda put
+        lac [P_CMA]
+        jda put
+        lac [P_SWP]
+        jda put
+        jmp hend
+
+        // lrs shifts right, filled with 0s unless signed.
+he30,
+        lac [0677000]               // scr
+        jda shifts
+        lac kv
+        and [EAESIGN]
+        sza
+        jmp hend
+        lac hn
+        sza i
+        jmp hend
+        sub [022]
+        spa
+        jmp he31
+        lac k
+        lio [M_USHF]
+        jda report
+        jmp hend
+he31,
+        lac [022]
+        sub hn
+        jda lowm                    // 0777777 >> n
+        dac hm
+        lio hm
+        lac [P_AND]
+        jda putl
+        lac hm
+        cma
+        jda fill
+        jmp hend
+
+        // lls shifts left, the low bits filled from the link.
+he40,
+        lac [P_RCL]
+        jda shifts
+        lac hn
+        sza i
+        jmp hend
+        sub [023]
+        sma
+        jmp he41
+        lac hn
+        jda lowm
+        dac hm
+        lac [P_SWP]
+        jda put
+        lac hm
+        cma
+        dac hm2
+        lac [P_AND]
+        lio hm2
+        jda putl
+        lac hm
+        jda fill
+        lac [P_SWP]
+        jda put
+        jmp hend
+he41,
+        lac hn
+        sub [022]
+        jda lowm
+        dac hm
+        cma
+        dac hm2
+        lac [P_AND]
+        lio hm2
+        jda putl
+        lac hm
+        jda fill
+        lac [P_SWP]
+        jda put
+        lac [P_CLA]
+        jda put
+        lac [0777777]
+        jda fill
+        lac [P_SWP]
+        jda put
+        jmp hend
+
+        // als shifts AC left, filled from the link.
+he50,
+        lac [P_RAL]
+        jda shifts
+        lac hn
+        sza i
+        jmp hend
+        sub [022]
+        spa
+        jmp he51
+        lac [0777777]
+        jmp he52
+he51,
+        lac hn
+        jda lowm
+he52,
+        dac hm
+        cma
+        dac hm2
+        lac [P_AND]
+        lio hm2
+        jda putl
+        lac hm
+        jda fill
+        jmp hend
+
+// The shift op in AC by hn places, as items of nine places at most a word.
+// Entry: AC = the shift's opcode, hn = the places.
+// AC and IO are clobbered.
+// Called via jda.
+shifts, 0
+        dap shiftsx
+        lac hn
+        dac sn
+sh1,
+        lac sn
+        sza i
+        jmp shiftsx
+        sub [012]
+        spa
+        jmp sh2
+        lac sn
+        sub [011]
+        dac sn
+        lac [011]
+        jmp sh3
+sh2,
+        lac sn
+        dzm sn
+sh3,
+        jda lowm
+        ior shifts
+        jda put
+        jmp sh1
+shiftsx, jmp .
+
+// The low n bits set, (1 << n) - 1, n from 0 to 18.
+// Entry: AC = n.
+// Exit: AC = the mask.
+// IO is clobbered.
+// Called via jda.
+lowm,   0
+        dap lowmx
+        lac lowm
+        cma
+        dac lmn
+        dzm lmv
+        lac lowm
+        sza i
+        jmp lm2
+lm1,
+        lac lmv
+        ral 1s
+        ior [1]
+        dac lmv
+        isp lmn
+        jmp lm1
+lm2,
+        lac lmv
+lowmx,  jmp .
+
+// The fill of the places a shift emptied, from the link's sign.
+// AC is parked, and the link's 0 or -1, masked by the given mask, is ORed in.
+// translate.c's fillLines.
+// Entry: AC = the mask.
+// AC and IO are clobbered.
+// Called via jda.
+fill,   0
+        dap fillx
+        lac [P_DAC|X_T]
+        jda put
+        lac [P_LAC|X_LNK]
+        jda put
+        lac [0675777]               // sar 9s
+        jda put
+        lac [0675377]               // sar 8s
+        jda put
+        lac [P_AND]
+        lio fill
+        jda putl
+        lac [P_IOR|X_T]
+        jda put
+fillx,  jmp .
+
+#include "as1gi.ac"
+
+hc,     0
+hn,     0
+hm,     0
+hm2,    0
+sn,     0
+nb,     0
+lmn,    0
+lmv,    0
+
+        constants
+start 020000

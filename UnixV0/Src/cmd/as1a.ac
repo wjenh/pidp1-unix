@@ -1,0 +1,94 @@
+// as1a.ac holds what the analysis's overlays, as1k.am1, as1f.am1 and
+// as1l.am1, share.
+// That is a memory reference's target, and the tests of a word as a memory
+// reference and as an instruction a skip reaches.
+// See as1c.ac.
+
+// The target of the memory reference in kv, as a word of the program.
+// Entry: kv = the word; AC is ignored.
+// Exit: AC = kt = the target's index, -1 outside the program.
+// IO is preserved.
+// Called via jda.
+tgt,    0
+        dap tgtx
+        lac kv
+        and [017777]
+        sub [010000]
+        dac kt
+        spa
+        jmp tgt1
+        sub nk
+        spa
+        jmp tgt2
+tgt1,
+        law i 1
+        dac kt
+tgt2,
+        lac kt
+tgtx,   jmp .
+
+// 1 when word k is code, a memory reference with opcode IO (bits 0-3).
+// Entry: AC = k, IO = the opcode.
+// Exit: AC = 1 or 0.
+// IO is clobbered.
+// Called via jda.
+ismr,   0
+        dap ismrx
+        dio imop
+        lac ismr
+        jda getf
+        and [KMASK|CMASK]
+        sas [KCODE|CMEM]
+        jmp ismr1
+        lac ismr
+        jda getv
+        and [0740000]
+        sas imop
+        jmp ismr1
+        lac [1]
+        jmp ismrx
+ismr1,
+        cla
+ismrx,  jmp .
+
+// 1 when word k is an instruction a skip may reach.
+// That is code, or a negative literal not an entry.
+// Entry: AC = k.
+// Exit: AC = 1 or 0.
+// IO is clobbered.
+// Called via jda.
+codel,  0
+        dap codelx
+        lac codel
+        spa
+        jmp codel1
+        sub nk
+        sma
+        jmp codel1
+        lac codel
+        jda getf
+        dac cdlf
+        and [KMASK]
+        sad [KCODE]
+        jmp codel2
+        sas [KDATA]
+        jmp codel1
+        lac cdlf
+        and [FENT]
+        sza
+        jmp codel1
+        lac codel
+        jda getv
+        and [0760000]
+        sas [0760000]
+        jmp codel1
+codel2,
+        lac [1]
+        jmp codelx
+codel1,
+        cla
+codelx, jmp .
+
+kt,     0
+imop,   0
+cdlf,   0

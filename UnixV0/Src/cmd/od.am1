@@ -1,0 +1,157 @@
+od
+// Translated by as7am1 from the PDP-7 source other/wktod.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp u_main
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0113/
+u_main, lac i 07777
+w_10001,sad u_d4
+w_10002,jmp u_noarg
+w_10003,lac 07777
+w_10004,add u_d5
+w_10005,dac u_argptr
+w_10006,cal 03
+u_argptr,0000000
+w_10010,0000000
+w_10011,sma i
+w_10012,jmp u_badfile
+w_10013,dac u_fd
+u_lineloop,lac u_fd
+w_10015,cal 04
+w_10016,u_buf
+w_10017,0000010
+w_10020,sza i
+w_10021,cal 016
+w_10022,dac u_count
+w_10023,lac u_offset
+w_10024,jda u_octal
+w_10025,lac u_d1
+w_10026,cal 05
+w_10027,u_colon
+w_10030,0000001
+w_10031,lac u_ibufptr
+w_10032,dac u_bufptr
+u_printloo,lac i u_bufptr
+w_10034,jda u_octal
+w_10035,lac u_d1
+w_10036,cal 05
+w_10037,u_space
+w_10040,0000001
+w_10041,law i 01
+w_10042,add u_count
+w_10043,dac u_count
+w_10044,sza i
+w_10045,jmp u_endoflin
+w_10046,idx u_bufptr
+        sza
+w_10047,jmp u_printloo
+u_endoflin,lac u_d1
+w_10051,cal 05
+w_10052,u_newline
+w_10053,0000001
+w_10054,lac u_d8
+w_10055,add u_offset
+w_10056,dac u_offset
+w_10057,jmp u_lineloop
+u_octal,0000000
+        dap r_octal
+        lac u_octal
+w_10061,lia
+w_10062,law i 06
+w_10063,dac u_c
+w_10064,cla
+w_10065,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_10066,add u_o60
+w_10067,dac u_cbuf
+w_10070,lac u_d1
+w_10071,cal 05
+w_10072,u_cbuf
+w_10073,0000001
+w_10074,idx u_c
+        sza
+w_10075,jmp w_10064
+w_10076,jmp r_octal
+u_noarg,lac u_d1
+w_10100,cal 05
+w_10101,u_noargstr
+w_10102,0000004
+w_10103,cal 016
+u_noargstr,0156157
+w_10105,0040141
+w_10106,0162147
+w_10107,0000012
+u_badfile,lac u_argptr
+w_10111,dac w_10114
+w_10112,lac u_d1
+w_10113,cal 05
+w_10114,0000000
+w_10115,0000004
+w_10116,lac u_d1
+w_10117,cal 05
+w_10120,w_10123
+w_10121,0000002
+w_10122,cal 016
+w_10123,0000040
+w_10124,0077012
+u_ibufptr,u_buf
+u_bufptr,u_buf
+u_buf,
+        table 010, 0
+u_count,0000000
+u_offset,0000000
+u_cbuf, 0000000
+u_c,
+        table 01, 0
+u_fd,   0000000
+u_d1,   0000001
+u_d4,   0000004
+u_d5,   0000005
+u_d8,   0000010
+u_o60,  0000060
+u_colon,0072040
+u_space,0000040
+u_newline,0000012
+x_end,
+0110/
+r_octal,jmp 0
+        constants
+start 020000

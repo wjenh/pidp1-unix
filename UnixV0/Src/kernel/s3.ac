@@ -1,0 +1,723 @@
+// The kernel's third part, after 1970's s3.s, with a bad call, save and
+// exit, fork and the messages, sleeping on a device, and the special files
+// (the device switch, the terminals and the paper tape).
+// Bank 0, the window open.
+// Needs unix.ah.
+
+// A call number outside the table, or a call this kernel does not have,
+// ends the process as by save (s3.s:89-101).
+// Reached by jmp.
+badcal,
+
+// sys save (s3.s:95-101).
+// Writes the core image to the file core (i-number 1), the process's 4096
+// words then userdata, with the program's 010-017 in uRg.
+// Then it goes on into exit.
+sysSave,
+        lac uBank
+        ior [010]
+        dac cpSrc
+        lac [uRg]
+        dac cpDst
+        law 010
+        jda copy
+        law ICORE
+        jda iget
+        lac uBank
+        dac rwBase
+        lac [BANKW]
+        dac rwCount
+        cla
+        jda iwrite          // AC = the words written, userdata's offset
+        dac svOff
+        lac [userdata]
+        dac rwBase
+        law UDLEN
+        dac rwCount
+        lac svOff
+        jda iwrite
+        jda iput
+
+// sys exit (s3.s:103-115).
+// The display is stopped if this process holds it, and the processes
+// waiting to send to this one are woken, to try again and fail.
+// The process's slot is freed and its pid cleared, and the next process
+// runs.
+// With no process left nothing can run again, so the system block is
+// written if the call changed it and the machine halts.
+sysExit,
+        lac uBank
+        sad dyBnk           // skip unless this process holds the display
+        jda dyoff
+        jda awake
+        lsm
+        lac i uUlistp
+        and [077777]        // the status, bits 0-2, to free
+        dac i uUlistp
+        esm
+        lac uUlistp
+        add [1]
+        dac sysP
+        dzm i sysP
+        jda syssav
+        lac [ulist]
+        dac exP
+        law i NPROC
+        dac exN
+ex1,    lac i exP
+        and [PSTAT]
+        sza                 // skip if free
+        jmp ex2
+        lac exP
+        add [PENT]
+        dac exP
+        isp exN
+        jmp ex1
+        law HEXIT
+        jmp halt
+ex2,    jda swap            // never returns, since this slot is free
+        jmp ex2
+
+// sys fork (s3.s:58-86).
+// Makes a copy of the caller in a free slot's bank.
+// As in 1970 the child runs first, in the caller's place, and the parent
+// waits, ready, to return at its next turn.
+// The parent returns with AC = the child's pid at the word after the call,
+// the child with AC = the parent's pid one word further on.
+// No free slot is error.
+// The copy is the 4,096 words of the bank, frame and all, about 250 ms.
+sysFork,
+        lac [ulist]
+        dac fkP
+        law i NPROC
+        dac fkN
+        dzm fkS
+fk1,    lac i fkP
+        and [PSTAT]
+        sza i               // skip if in use
+        jmp fk2
+        lac fkP
+        add [PENT]
+        dac fkP
+        idx fkS
+        isp fkN
+        jmp fk1
+        jmp error
+fk2,    lac fkS
+        add [2]             // its bank, 2 to 017
+        dac fkK
+        ral 6s
+        ral 6s              // as a 16-bit address base
+        dac fkB
+        dac cpDst
+        lac uBank
+        dac cpSrc
+        lac [BANKW]
+        jda copy
+        idx uniqpid
+        dac uAc             // the parent's answer, the child's pid
+        lac [jmp sysexit]
+        dac uSwapret        // where the parent resumes
+        lac [userdata]
+        dac cpSrc
+        lac uSlot
+        ral 6s
+        add [UDSAVE]
+        dac cpDst
+        law UDLEN
+        jda copy
+// the running process becomes the child, with its table entry ready, its
+// pid, and no message
+// its userdata is the parent's but for these words
+        lac fkK
+        ior [PREADY]
+        dac i fkP
+        lac fkP
+        dac uUlistp
+        add [1]
+        dac fkP
+        lac uniqpid
+        dac i fkP
+        idx fkP
+        dzm i fkP
+        idx fkP
+        dzm i fkP
+        lac fkB
+        dac uBank
+        lac fkS
+        dac uSlot
+        jda sbit
+        dac uSbit
+        lac uPid
+        dac uAc             // the child's answer, the parent's pid
+        lac uniqpid
+        dac uPid
+        lac uPc
+        add [1]
+        and [07777]
+        dac uPc
+        dzm uIntflg
+        jmp sysexit
+
+// sys rmes (s3.s:117-140).
+// Waits for a message.
+// Exit: AC = the sender's pid, IO = the message.
+// Those waiting to send to this process are woken first.
+// smes makes it ready again once it has left the message in its table
+// entry.
+sysRmes,
+        jda awake
+        lsm
+        lac i uUlistp
+        add [PNREADY-PREADY]
+        dac i uUlistp
+        lac uUlistp
+        add [PMSG]
+        dac sysP
+        lac [RMWAIT]
+        dac i sysP
+        jda swap
+        lac uUlistp         // a message has come
+        add [PMSG]
+        dac sysP
+        lac i sysP
+        and [0377777]       // MSGIN off, leaving the sender's pid
+        dac uAc
+        dzm i sysP
+        idx sysP
+        lac i sysP
+        dac uMq
+        dzm i sysP
+        jmp sysexit
+
+// sys smes (s3.s:145-196).
+// Entry: AC = a pid, IO = a message.
+// The message is delivered when that process waits in rmes.
+// That process is made ready with the message, and AC = 0.
+// Otherwise this process waits until that one calls rmes (awake), and tries
+// again.
+// No such process, or a pid not 1 or more, is error.
+// 1970 marked a message waiting with the complemented pid.
+// In ones' complement the pid 1 complemented is -1, 1970's mark of a process
+// in rmes, so the pid is kept with MSGIN set instead.
+sysSmes,
+sm0,    lac uAc
+        spa                 // skip unless negative
+        jmp error
+        sza i               // skip unless 0
+        jmp error
+        lac [ulist+1]
+        dac smP
+        law i NPROC
+        dac smN
+sm1,    lac i smP
+        sad uAc
+        jmp sm2
+        lac smP
+        add [PENT]
+        dac smP
+        isp smN
+        jmp sm1
+        lac uUlistp         // none, so not waiting to send any more
+        add [PMSG]
+        dac sysP
+        dzm i sysP
+        jmp error
+sm2,    lac smP             // the receiver's entry, and its message words
+        sub [1]
+        dac smE
+        add [PMSG]
+        dac smQ
+        lsm
+        lac i smQ
+        sas [RMWAIT]        // skip if it waits in rmes
+        jmp sm3
+        lac uPid
+        ior [MSGIN]
+        dac i smQ
+        idx smQ
+        lac uMq
+        dac i smQ
+        lac i smE
+        sub [PNREADY-PREADY]
+        dac i smE
+        esm
+        jmp okexit
+sm3,    lac i uUlistp       // wait until it calls rmes
+        add [PNREADY-PREADY]
+        dac i uUlistp
+        lac uUlistp
+        add [PMSG]
+        dac sysP
+        lac uAc
+        dac i sysP
+        jda swap
+        lac uUlistp
+        add [PMSG]
+        dac sysP
+        dzm i sysP
+        jmp sm0
+
+// Wake the processes waiting in smes to send to the running process
+// (s3.s:198-219), each not ready whose third word is its pid.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+awake,  0
+        dap awX
+        lsm
+        lac [ulist]
+        dac awP
+        law i NPROC
+        dac awN
+aw1,    lac i awP
+        and [PSTAT]
+        sas [PNREADY]       // skip if not ready
+        jmp aw2
+        lac awP
+        add [PMSG]
+        dac awQ
+        lac i awQ
+        sas uPid            // skip if waiting to send to this one
+        jmp aw2
+        lac i awP
+        sub [PNREADY-PREADY]
+        dac i awP
+aw2,    lac awP
+        add [PENT]
+        dac awP
+        isp awN
+        jmp aw1
+        esm
+awX,    jmp .
+
+// A slot's bit in a sleep word.
+// Entry: AC = the slot, 0 to 13.
+// Exit: AC = SLOTBIT0 shifted right by the slot.
+// IO is clobbered.
+// Called by jda.
+sbit,   0
+        dap sbX
+        lac [SLOTBIT0]
+        dac sbB
+        lac sbit
+        sza i               // skip unless slot 0
+        jmp sb2
+        cma
+        dac sbN
+sb1,    lac sbB
+        rar 1s
+        dac sbB
+        isp sbN
+        jmp sb1
+sb2,    lac sbB
+sbX,    jmp .
+
+// Put the running process to sleep on a device's sleep word, after 1970's
+// sleep (s5.s:117-145).
+// The process is made not ready, and its slot's bit is set in the word, for
+// the break routine's wakeup (s7.ac).
+// Breaks must be off from the caller's test of the device until swap turns
+// them on, or the wakeup could come between and be lost.
+// The caller calls swap next.
+// Entry: AC = the sleep word's address.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+sleep,  0
+        dap slX
+        lac i sleep
+        ior uSbit
+        dac i sleep
+        lac i uUlistp
+        add [PNREADY-PREADY]
+        dac i uUlistp
+slX,    jmp .
+
+// The special file's device, from the device switch (s3.s:224-229),
+// indexed by the loaded i-node's i-number.
+// Exit: AC = its code, kept in uDev for the call's later turns.
+// An i-number with no device is error.
+// IO is clobbered.
+// Called by jda.
+devcode, 0
+        dap dvX
+        lac ii
+        sub [DVTABN]
+        sma                 // skip if in the table
+        jmp error
+        lac ii
+        add [dvTab]
+        dac dvP
+        lac i dvP
+        sza i               // skip if a device
+        jmp error
+        dac uDev
+dvX,    jmp .
+
+// sys read and sys write on a special file, reached by jmp from sysRead and
+// sysWrite with the file loaded and uBase, uCount and uLimit set.
+// Each device's routine ends the call.
+// 1970's one switch served both, so a read of an output ran its write
+// routine (s3.s:224-229).
+// Here the wrong direction is error.
+spRead, jda devcode
+        and [DVKIND]
+        sad [DVTIN]
+        jmp ttyRead
+        sad [DVPTR]
+        jmp pptRead
+        jmp error
+spWrite,
+        jda devcode
+        and [DVKIND]
+        sad [DVTOUT]
+        jmp ttyWrite
+        sad [DVPTP]
+        jmp pptWrite
+        jmp error
+
+// An interrupt key on the caller's standard input ends it with a core image
+// (s3.s:391-400).
+// Checked as a terminal call begins and each time it wakes.
+// Exit: AC and IO are clobbered.
+// Called by jda, and returns only when the process is not interrupted.
+chkint1, 0
+        dap c1X
+        jda chkint
+        jmp c1X
+        jmp sysSave
+c1X,    jmp .
+
+// A terminal's read, after 1970's rttyi (s3.s:233-248).
+// It takes one character a call, whatever the count, from the terminal's
+// input ring, where the break routine put it (s7.ac, tpoll).
+// The character, 7 bits, upper case made lower, goes into the high half of
+// the word at the buffer, and AC = 1.
+// ctrl-D gives AC = 0.
+// With nothing waiting, the end of file, AC = 0, comes once after the caller
+// hangs up.
+// Otherwise the process sleeps until a character, a hang-up or an interrupt
+// key.
+// Reached by jmp from spRead.
+ttyRead,
+tr0,    jda chkint1
+        lac uDev
+        and [DVTERM]
+        dac trK
+        lsm
+        add [tCnt]
+        dac trP
+        lac i trP
+        sza i               // skip if a character is waiting
+        jmp tr3
+        sub [1]
+        dac i trP
+        lac trK
+        add [tOut]
+        dac trP
+        lac i trP
+        dac trI
+        add [1]
+        and [QMASK]
+        dac i trP
+        lac trK
+        ral 6s              // QLEN words a terminal
+        add [TQBASE]
+        add trI
+        dac trP
+        lac i trP
+        esm
+        and [0177]
+        dac trC
+        sub [0101]          // 'A'
+        spa                 // skip if 'A' or above
+        jmp tr1
+        sub [032]
+        sma                 // skip if 'Z' or below
+        jmp tr1
+        lac trC
+        add [040]
+        jmp passone
+tr1,    lac trC
+        jmp passone
+tr3,    lac trK
+        add [tEof]
+        dac trP
+        lac i trP
+        sza i               // skip if the caller hung up since
+        jmp tr4
+        dzm i trP
+        esm
+        jmp okexit
+tr4,    lac trK
+        add [tRsl]
+        jda sleep
+        jda swap
+        jmp tr0
+
+// A character to the caller, after 1970's passone (s3.s:376-382).
+// It goes in the high half of the word at the buffer, and AC = 1.
+// ctrl-D gives AC = 0 and nothing is stored.
+// Reached by jmp with AC = the character, and ends the call.
+passone,
+        ral 9s
+        sad [CHEOT<<011]
+        jmp okexit
+        dac trC
+        lac uBase
+        jda uptr
+        dac trP
+        lac trC
+        dac i trP
+        law 1
+        dac uAc
+        jmp sysexit
+
+// A terminal's write, after 1970's wttyo (s3.s:250-277).
+// It sends the words' two characters each, high half first, NULs skipped,
+// and AC = the count.
+// Each is sent to the terminal's DCS2 channel with ssb and tcb, DCS2
+// turning NL into CR LF.
+// With the transmit buffer full the process sleeps until the room-again
+// break and sends the character again.
+// With no caller, the characters are dropped while the hang-up's end of
+// file is still to be read, the old caller's output.
+// After it, the process sleeps until the next caller, so a new login's
+// greeting waits for its caller.
+// Reached by jmp from spWrite.
+ttyWrite,
+tw0,    jda chkint1
+tw1,    jda forall
+        jmp twEnd
+        sza i               // skip unless a NUL, which is not sent
+        jmp tw4
+        dac twC
+        lac uDev
+        and [DVTERM]
+        dac twK
+        lsm
+        add [tCon]
+        dac twP
+        lac i twP
+        sza                 // skip if no caller
+        jmp tw2
+        lac twK
+        add [tEof]
+        dac twP
+        lac i twP
+        sza                 // skip unless the caller hung up since
+        jmp tw3
+        jmp tw5
+tw2,    lio twK
+        ssb
+        lio twC
+        tcb
+        dio twS
+        lac twS
+        and [dserr+dseflf]
+        sad [dserr+dseflf]
+        jmp tw5             // the transmit buffer is full
+tw3,    esm                 // sent, or dropped
+tw4,    jda fallr
+        jmp tw1
+tw5,    lac twK
+        add [tWsl]
+        jda sleep
+        jda swap
+        jmp tw0
+twEnd,  lac uCount
+        dac uAc
+        jmp sysexit
+
+// The paper tape reader's read, after 1970's rppti (s3.s:323-336).
+// It reads one character a call, blank tape skipped, into the high half of
+// the word at the buffer, and AC = 1.
+// The reader is polled, not run by breaks.
+// rpa is given without its wait, then cks's bit 1 is polled until the
+// character is in, with breaks on but no other process running.
+// No character for PTRWAIT ms is the end of the tape, AC = 0.
+// Reached by jmp from spRead.
+pptRead,
+pr0,    cli
+        rck
+        dio prT
+        rpa-i               // start the reader on a character, no wait
+pr1,    cks
+        ril 1s
+        spi i               // skip when the character is in
+        jmp pr2
+        rrb                 // IO = the character
+        dio prC
+        lac prC
+        and [0377]
+        sza i               // skip unless blank tape
+        jmp pr0
+        jmp passone
+pr2,    cli
+        rck
+        dio prN
+        lac prN
+        sub prT
+        spa                 // skip unless the counter wrapped
+        add [CLKWRAP]
+        sub [PTRWAIT]
+        spa                 // skip when the time is up
+        jmp pr1
+        jmp okexit
+
+// The paper tape punch's write, after 1970's wppto (s3.s:338-361).
+// It punches each character's low 8 bits, NULs skipped, and AC = the count.
+// The punch is polled, as the reader is, with ppa given without its wait
+// once cks's bit 4 says the punch is free.
+// ppa with its wait, with breaks on, loses every other character.
+// A punch not free within PTPWAIT ms is given the character anyway, so a
+// stuck punch cannot hold the machine.
+// Reached by jmp from spWrite.
+pptWrite,
+pw1,    jda forall
+        jmp twEnd
+        sza i               // skip unless a NUL
+        jmp pw2
+        dac twC
+        cli
+        rck
+        dio prT
+pw3,    cks
+        ril 4s
+        spi i               // skip when the punch is free
+        jmp pw4
+pw5,    lio twC
+        ppa-i               // punch the character, no wait
+pw2,    jda fallr
+        jmp pw1
+pw4,    cli
+        rck
+        dio prN
+        lac prN
+        sub prT
+        spa                 // skip unless the counter wrapped
+        add [CLKWRAP]
+        sub [PTPWAIT]
+        spa                 // skip when the time is up
+        jmp pw3
+        jmp pw5
+
+// The next character of a write's words, after 1970's forall (s5.s:84-97).
+// uBase is the word, with 0400000 set for its low half.
+// Exit: a skip with AC = the character, 9 bits, or no skip when uBase has
+// reached uLimit.
+// IO is clobbered.
+// Called by jda.
+forall, 0
+        dap flX
+        lac uBase
+        sad uLimit
+        jmp flX             // done
+        and [07777]
+        jda uptr
+        dac flP
+        lac i flP
+        dac flW
+        lac uBase
+        spa                 // skip if the high half
+        jmp fl1
+        lac flW
+        rar 9s
+        jmp fl2
+fl1,    lac flW
+fl2,    and [0777]
+        dac flW
+        idx flX             // the skip, which leaves its word in AC
+        lac flW
+flX,    jmp .
+
+// Step past the character forall gave, to the low half or to the next word.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+fallr,  0
+        dap fcX
+        lac uBase
+        xor [0400000]
+        dac uBase
+        spa                 // skip if past the low half
+        jmp fcX
+        add [1]
+        dac uBase
+fcX,    jmp .
+
+// The device switch, by i-number.
+// Terminal 0 is ttyin and ttyout (6 and 11), terminal 1 keyboard and
+// display (7 and 12), terminal k from 2 i-numbers 17 + 2(k - 2) and
+// 18 + 2(k - 2), and 8 and 13 the paper tape.
+// 0 is no device.
+dvTab,  0                   // 0
+        0                   // 1 core
+        0
+        0                   // 3 system
+        0                   // 4 dd
+        0
+        DVTIN               // 6 ttyin
+#if NTERM > 1
+        DVTIN+1             // 7 keyboard
+#else
+        0
+#endif
+        DVPTR               // 010 pptin
+        0
+        0
+        DVTOUT              // 013 ttyout
+#if NTERM > 1
+        DVTOUT+1            // 014 display
+#else
+        0
+#endif
+        DVPTP               // 015 pptout
+        0
+        0
+        0
+#if NTERM > 2
+        DVTIN+2             // 021 tty2in
+        DVTOUT+2            // 022 tty2out
+#else
+        0
+        0
+#endif
+#if NTERM > 3
+        DVTIN+3             // 023
+        DVTOUT+3
+#else
+        0
+        0
+#endif
+#if NTERM > 4
+        DVTIN+4             // 025
+        DVTOUT+4
+#else
+        0
+        0
+#endif
+#if NTERM > 5
+        DVTIN+5             // 027
+        DVTOUT+5
+#else
+        0
+        0
+#endif
+        0                   // 031
+        0
+        0
+        0
+        0
+        0
+        0
+        0                   // 040
+dvTabE,
+assert dvTabE-dvTab == DVTABN, "the device switch covers i-numbers 0 to 32"
+
+// Each terminal's input i-number, its mark when an interrupt key hits it
+// (chkint, in s1.ac).
+tIno,   6
+        7
+        0d17
+        0d19
+        0d21
+        0d23

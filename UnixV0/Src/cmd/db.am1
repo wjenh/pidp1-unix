@@ -1,0 +1,1843 @@
+db
+// Translated by as7am1 from the PDP-7 source cmd/db.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, the top of the process bank, where db.s:27 took 017777, the PDP-7 user's
+// top.
+// The name list is read from nlbuff to there.
+h_top,  07777
+// h_ty -- by hand, print's call through type (db.s:282, below), an indirect jms on the
+// PDP-7.
+// The PDP-1's jda has no indirect form.
+// prsym is a jda routine and is called by h_ty4's jda.
+// proct (prdec) and prasc are reached only through type, so the translator left them
+// PDP-7 routines that return by an indirect jump through their first word.
+// That word gets the return, as the PDP-7's jms put it there, and the routine is
+// entered at its second word with AC the word to print.
+// None of the three skips on return.
+// Entered by jmp from w_10367 with AC the word to print; leaves by jmp to w_10370.
+// AC and IO are not preserved.
+h_w,    0                               // the word to print, kept
+h_ps,   u_prsym                         // the jda routine among those type names
+h_rt,   w_10370                         // the return, past the call
+h_ty,   dac h_w
+        lac u_type
+        sad h_ps
+        jmp h_ty3
+        dap h_ty1
+        dap h_ty2
+        idx h_ty2                       // the routine's second word
+        lac h_rt
+h_ty1,  dac 0
+        lac h_w
+h_ty2,  jmp 0
+h_ty3,  dap h_ty4
+        lac h_w
+h_ty4,  jda 0
+        jmp w_10370
+0100/
+        SYSFRAME()
+0134/
+w_10000,lac i 07777
+w_10001,sad u_d4
+w_10002,jmp u_start
+w_10003,lac 07777
+w_10004,add u_d5
+w_10005,dac u_rcorep
+w_10006,dac u_wcorep
+w_10007,lac i 07777
+w_10010,sad u_d8
+w_10011,jmp u_start
+w_10012,sad u_d12
+w_10013,sma spa
+w_10014,jmp u_error
+w_10015,lac 07777
+w_10016,add u_d9
+w_10017,dac u_nlnamep
+u_start,jmp h_md
+w_10021,cma
+        sub [1]
+w_10022,add h_top
+w_10023,dzm x_lnk
+w_10024,lia
+        cla
+        scl 1s
+        div w_10025
+        jmp .+2
+        swp
+        jmp w_10026
+w_10025,0000006
+w_10026,dzm x_lnk
+w_10027,lai
+w_10030,mul w_10031
+        scr 1s
+        jmp w_10032
+w_10031,0000006
+w_10032,lai
+w_10033,dac u_namesize
+w_10034,cal 03
+u_nlnamep,u_nlname
+w_10036,0000000
+w_10037,dac u_symindex
+w_10040,sma
+w_10041,jmp w_10046
+w_10042,dzm u_nlcnt
+w_10043,lac u_nlbufp
+w_10044,dac u_nlsize
+w_10045,jmp w_10056
+w_10046,cal 04
+w_10047,x_end
+u_namesize,0000000
+w_10051,sma i
+w_10052,jmp w_10042
+w_10053,dac u_nlcnt
+w_10054,add u_nlbufp
+w_10055,dac u_nlsize
+w_10056,lac u_symindex
+w_10057,cal 011
+w_10060,cal 03
+u_wcorep,u_corename
+w_10062,0000001
+w_10063,dac u_wcore
+w_10064,cal 03
+u_rcorep,u_corename
+w_10066,0000000
+w_10067,dac u_rcore
+w_10070,sma i
+w_10071,jmp u_error
+w_10072,lac u_o52012
+w_10073,jda u_wchar
+w_10074,jmp h_dd
+w_10075,dac u_nsearch
+w_10076,jda u_nlsearch
+w_10077,jmp u_mloop
+w_10100,lac u_value
+w_10101,dac u_relocval
+w_10102,cma
+        sub [1]
+w_10103,add u_d1
+w_10104,dac u_mrelocv
+w_10105,dzm u_sysflag
+u_mloop,law i 01
+w_10107,dac u_nwords
+u_ml1,  jda u_rch
+w_10111,dac u_nchar1
+w_10112,sad u_o52
+w_10113,sma spa
+w_10114,jmp w_10117
+w_10115,dzm u_nchar1
+w_10116,dac u_indflg
+w_10117,jda u_getexp
+w_10120,lac u_errf
+w_10121,sza i
+w_10122,jmp u_cmd
+u_error,dzm u_indflg
+w_10124,lac u_o40
+w_10125,dac u_rator
+w_10126,dzm u_errf
+w_10127,lac u_d1
+w_10130,cal 05
+w_10131,u_errmes
+w_10132,0000001
+w_10133,jmp u_mloop
+u_cmd,  lai
+w_10135,sad u_o41
+w_10136,jmp u_patch
+w_10137,lac u_opfound
+w_10140,sza i
+w_10141,jmp w_10152
+w_10142,lac u_comflg
+w_10143,dzm u_comflg
+w_10144,sza
+w_10145,jmp w_10152
+w_10146,lac u_curval
+w_10147,dac u_curdot
+w_10150,lac u_curreloc
+w_10151,dac u_dotrel
+w_10152,lai
+w_10153,sad u_o42
+w_10154,jmp u_ascii
+w_10155,sad u_o12
+w_10156,jmp u_newln
+w_10157,sad u_o77
+w_10160,jmp u_symbol
+w_10161,sad u_o47
+w_10162,jmp u_saddress
+w_10163,sad u_o75
+w_10164,jmp u_address
+w_10165,sad u_o57
+w_10166,jmp u_octal
+w_10167,sad u_o72
+w_10170,jmp u_decimal
+w_10171,sad u_o136
+w_10172,sma spa
+w_10173,jmp w_10176
+w_10174,dac u_sysflag
+w_10175,jmp u_mloop
+w_10176,sad u_o45
+w_10177,sma spa
+w_10200,jmp w_10203
+w_10201,dzm u_sysflag
+w_10202,jmp u_mloop
+w_10203,sad u_d1
+w_10204,cal 016
+w_10205,sad u_o54
+w_10206,sma spa
+w_10207,jmp u_error
+w_10210,jda u_getexp
+w_10211,lac u_errf
+w_10212,sza
+w_10213,jmp u_error
+w_10214,lac [0760000]
+w_10215,dac u_comflg
+w_10216,lac u_curreloc
+w_10217,sza
+w_10220,jmp w_10225
+w_10221,lac u_value
+w_10222,cma
+        sub [1]
+w_10223,dac u_nwords
+w_10224,jmp u_cmd
+w_10225,lac u_dotrel
+w_10226,sza i
+w_10227,jmp u_error
+w_10230,lac u_curval
+w_10231,cma
+        sub [1]
+w_10232,add u_curdot
+w_10233,sma
+w_10234,jmp u_error
+w_10235,dac u_nwords
+w_10236,jmp u_cmd
+u_saddress,lac u_curdot
+w_10240,dac w_10254
+w_10241,dzm u_curdot
+w_10242,lac u_dotrel
+w_10243,sza
+w_10244,lac u_relocval
+w_10245,add w_10254
+w_10246,jda u_prsym
+w_10247,lac u_o12
+w_10250,jda u_wchar
+w_10251,lac w_10254
+w_10252,dac u_curdot
+w_10253,jmp u_mloop
+w_10254,0000000
+u_symbol,law u_prsym
+w_10256,dac u_type
+w_10257,jmp u_print
+u_octal,law u_prdec
+w_10261,dac u_type
+w_10262,jmp u_print
+u_ascii,law u_prasc
+w_10264,dac u_type
+w_10265,jmp u_print
+u_decimal,law u_prdec
+w_10267,dac u_type
+w_10270,jmp u_print
+u_address,lac u_curdot
+w_10272,jda u_octw
+w_10273,0000005
+w_10274,lac u_curreloc
+w_10275,sza
+w_10276,jmp w_10302
+w_10277,lac u_o12
+w_10300,jda u_wchar
+w_10301,jmp u_mloop
+w_10302,lac u_o162012
+w_10303,jda u_wchar
+w_10304,jmp u_mloop
+u_print,lac u_sysflag
+w_10306,sza
+w_10307,jmp w_10316
+w_10310,lac u_dotrel
+w_10311,sza
+w_10312,jmp w_10321
+w_10313,lac u_curdot
+w_10314,dac u_addr
+w_10315,jmp u_sprint
+w_10316,lac u_curdot
+w_10317,dac u_addr
+w_10320,jmp u_sprint
+w_10321,law u_inbuf
+w_10322,dac u_addr
+w_10323,lac u_curdot
+w_10324,dac w_10327
+w_10325,lac u_rcore
+w_10326,cal 07
+w_10327,0000000
+w_10330,0000000
+w_10331,sma i
+w_10332,jmp u_error
+w_10333,lac u_rcore
+w_10334,cal 04
+w_10335,u_inbuf
+w_10336,0000100
+w_10337,sma i
+w_10340,jmp u_error
+w_10341,sza i
+w_10342,jmp u_error
+u_sprint,lac u_indflg
+w_10344,sza i
+w_10345,jmp w_10362
+w_10346,dzm u_indflg
+w_10347,lac i u_addr
+w_10350,and h_am
+w_10351,dac u_curdot
+w_10352,dzm u_dotrel
+w_10353,add u_mrelocv
+w_10354,sma i
+w_10355,jmp u_print
+w_10356,dac u_curdot
+w_10357,lac u_d1
+w_10360,dac u_dotrel
+w_10361,jmp u_print
+w_10362,lac u_o40
+w_10363,jda u_wchar
+w_10364,lac u_addr
+w_10365,dac w_10417
+w_10366,lac i u_addr
+w_10367,jmp h_ty
+w_10370,lac w_10417
+w_10371,dac u_addr
+w_10372,dac x_ac
+        idx u_addr
+        sza
+        jmp s_10372
+        lac x_ac
+        jmp w_10374
+s_10372,lac x_ac
+w_10373,law u_prasc
+w_10374,sad u_type
+w_10375,jmp w_10400
+w_10376,lac u_nl
+w_10377,jda u_wchar
+w_10400,idx u_nwords
+        sza
+w_10401,jmp w_10411
+w_10402,law u_prasc
+w_10403,sad u_type
+w_10404,sma spa
+w_10405,jmp u_mloop
+w_10406,lac u_nl
+w_10407,jda u_wchar
+w_10410,jmp u_mloop
+w_10411,idx u_curdot
+        sza
+w_10412,nop
+w_10413,lac u_nwords
+w_10414,sma i
+w_10415,jmp u_print
+w_10416,jmp w_10362
+w_10417,0000000
+u_prdec,0000000
+w_10421,jda u_octw
+w_10422,0000006
+w_10423,jmp i u_prdec
+u_patch,lac u_opfound
+w_10425,sza i
+w_10426,jmp u_error
+w_10427,lac u_curreloc
+w_10430,sza i
+w_10431,jmp w_10435
+w_10432,lac u_curval
+w_10433,add u_relocval
+w_10434,sma spa
+w_10435,lac u_curval
+w_10436,dac u_inbuf
+w_10437,lac u_sysflag
+w_10440,sza i
+w_10441,jmp w_10445
+w_10442,lac u_inbuf
+w_10443,dac i u_curdot
+w_10444,jmp u_bump
+w_10445,lac u_dotrel
+w_10446,sza i
+w_10447,jmp u_error
+w_10450,lac u_curdot
+w_10451,dac w_10456
+w_10452,lac u_wcore
+w_10453,sma i
+w_10454,jmp u_error
+w_10455,cal 07
+w_10456,0000000
+w_10457,0000000
+w_10460,sma i
+w_10461,jmp u_error
+w_10462,lac u_wcore
+w_10463,cal 05
+w_10464,u_inbuf
+w_10465,0000001
+w_10466,sma i
+w_10467,jmp u_error
+u_bump, law i 01
+w_10471,dac u_nwords
+w_10472,idx u_curdot
+        sza
+w_10473,jmp u_print
+u_newln,lac u_opfound
+w_10475,sza i
+w_10476,jmp u_bump
+w_10477,jmp u_print
+u_getexp,0000000
+        dap r_getexp
+        lac u_getexp
+w_10501,dzm u_errf
+w_10502,lac u_o40
+w_10503,dac u_rator
+w_10504,dzm u_curval
+w_10505,dzm u_curreloc
+w_10506,dzm u_reloc
+w_10507,dzm u_value
+w_10510,dzm u_opfound
+u_xloop,jda u_rch
+w_10512,lia
+w_10513,sad u_o044
+w_10514,sma spa
+w_10515,jmp w_10521
+w_10516,jda u_getspec
+w_10517,jda u_oprand
+w_10520,jmp u_xloop
+w_10521,add u_om60
+w_10522,sma i
+w_10523,jmp w_10533
+w_10524,add u_om10
+w_10525,sma
+w_10526,jmp w_10533
+w_10527,lai
+w_10530,jda u_getnum
+w_10531,jda u_oprand
+w_10532,jmp u_xloop
+w_10533,lai
+w_10534,sad u_o56
+w_10535,jmp w_10544
+w_10536,add u_om141
+w_10537,sma i
+w_10540,jmp w_10550
+w_10541,add u_om32
+w_10542,sma
+w_10543,jmp w_10550
+w_10544,lai
+w_10545,jda u_getsym
+w_10546,jda u_oprand
+w_10547,jmp u_xloop
+w_10550,lai
+w_10551,add u_om101
+w_10552,sma i
+w_10553,jmp w_10557
+w_10554,add u_om32
+w_10555,sma i
+w_10556,jmp w_10544
+w_10557,lai
+w_10560,sad u_o74
+w_10561,sma spa
+w_10562,jmp w_10571
+w_10563,jda u_rch
+w_10564,dac x_lnk
+        ral 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+w_10565,dac u_value
+w_10566,dzm u_reloc
+w_10567,jda u_oprand
+w_10570,jmp u_xloop
+w_10571,sad u_o40
+w_10572,jmp u_xloop
+w_10573,sad u_o55
+w_10574,sma spa
+w_10575,jmp w_10605
+w_10576,lac u_o40
+w_10577,sad u_rator
+w_10600,sma spa
+w_10601,jmp u_error
+w_10602,lai
+w_10603,dac u_rator
+w_10604,jmp u_xloop
+w_10605,sad u_o53
+w_10606,jmp w_10576
+w_10607,lac u_curreloc
+w_10610,sza i
+w_10611,jmp w_10615
+w_10612,sad u_d1
+w_10613,sma spa
+w_10614,dac u_errf
+w_10615,lac u_o40
+w_10616,sad u_rator
+w_10617,jmp r_getexp
+w_10620,dac u_errf
+w_10621,jmp r_getexp
+u_getspec,0000000
+        dap r_getspec
+        lac u_getspec
+w_10623,jda u_rch
+w_10624,sad u_o141
+w_10625,jmp u_spcac
+w_10626,sad u_o161
+w_10627,jmp u_spcmq
+w_10630,sad u_o151
+w_10631,jmp u_spcic
+w_10632,lia
+w_10633,add u_om60
+w_10634,sma i
+w_10635,jmp w_10644
+w_10636,add u_om10
+w_10637,sma
+w_10640,jmp w_10644
+w_10641,lai
+w_10642,jda u_getnum
+w_10643,jmp u_spcai
+w_10644,lac [0760000]
+w_10645,dac u_errf
+w_10646,jmp r_getspec
+u_spcac,cla
+w_10650,jmp w_10657
+u_spcmq,lac u_d1
+w_10652,jmp w_10657
+u_spcic,lac u_d10
+w_10654,jmp w_10657
+u_spcai,lac u_value
+w_10656,add u_dm6
+w_10657,add u_o10000
+w_10660,dac u_value
+w_10661,lac u_d1
+w_10662,dac u_reloc
+w_10663,jmp r_getspec
+u_getsym,0000000
+        dap r_getsym
+        lac u_getsym
+w_10665,lia
+w_10666,law u_symbuf
+w_10667,dac u_symbufp
+w_10670,dzm u_symbuf
+w_10671,law i 010
+w_10672,dac u_symcnt
+w_10673,dzm u_nchar1
+w_10674,lac u_nopcom
+w_10675,dac u_skipt
+w_10676,sma spa
+u_storech,lia
+w_10700,lac i u_symbufp
+w_10701,and u_o177000
+w_10702,sza i
+w_10703,jmp w_10711
+w_10704,dac x_t
+        lai
+        ior x_t
+w_10705,dac i u_symbufp
+w_10706,idx u_symbufp
+        sza
+w_10707,dzm i u_symbufp
+w_10710,jmp w_10713
+w_10711,dac x_lnk
+        rcl 9s
+        rcl 9s
+        rcl 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+        swp
+        cla
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0777777]
+        ior x_t
+        swp
+w_10712,dac i u_symbufp
+w_10713,idx u_symcnt
+        sza
+w_10714,sma spa
+w_10715,jmp u_endsym
+u_skipt,nop
+w_10717,jda u_rch
+w_10720,sad u_o76
+w_10721,sma spa
+w_10722,jmp w_10731
+w_10723,lac u_symbuf
+w_10724,dac x_lnk
+        scr 9s
+w_10725,and u_o177
+w_10726,dac u_value
+w_10727,dzm u_reloc
+w_10730,jmp r_getsym
+w_10731,sad u_o56
+w_10732,jmp u_storech
+w_10733,dac u_nchar1
+w_10734,add u_om60
+w_10735,sma i
+w_10736,jmp u_fill
+w_10737,add u_m10
+w_10740,sma i
+w_10741,jmp w_10760
+w_10742,lac u_nchar1
+w_10743,add u_om141
+w_10744,sma i
+w_10745,jmp w_10751
+w_10746,add u_om32
+w_10747,sma i
+w_10750,jmp w_10760
+w_10751,lac u_nchar1
+w_10752,add u_om101
+w_10753,sma i
+w_10754,jmp u_fill
+w_10755,add u_om32
+w_10756,sma
+w_10757,jmp u_fill
+w_10760,lac u_nchar1
+w_10761,dzm u_nchar1
+w_10762,jmp u_storech
+u_fill, lac u_trafill
+w_10764,dac u_skipt
+w_10765,lac u_o40
+w_10766,jmp u_storech
+u_endsym,lac u_symbuf
+w_10770,sad u_o56040
+w_10771,jmp u_dotsym
+w_10772,jmp h_gs
+w_10773,dac u_nsearch
+w_10774,jda u_nlsearch
+w_10775,jmp u_undef
+w_10776,dzm u_nsearch
+w_10777,jmp r_getsym
+u_dotsym,lac u_curdot
+w_11001,dac u_value
+w_11002,lac u_dotrel
+w_11003,dac u_reloc
+w_11004,jmp r_getsym
+u_undef,dzm u_nsearch
+w_11006,lac [0760000]
+w_11007,dac u_errf
+w_11010,jmp r_getsym
+u_getnum,0000000
+        dap r_getnum
+        lac u_getnum
+w_11012,dzm u_reloc
+w_11013,dzm u_value
+u_num1, add u_om60
+w_11015,lia
+w_11016,lac u_value
+w_11017,dac x_lnk
+        ral 3s
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+w_11020,dac x_t
+        lai
+        ior x_t
+w_11021,dac u_value
+w_11022,jda u_rch
+w_11023,dac u_nchar1
+w_11024,sad u_o162
+w_11025,jmp u_nrel
+w_11026,add u_om60
+w_11027,sma i
+w_11030,jmp r_getnum
+w_11031,add u_om10
+w_11032,sma
+w_11033,jmp r_getnum
+w_11034,lac u_nchar1
+w_11035,dzm u_nchar1
+w_11036,jmp u_num1
+u_nrel, dzm u_nchar1
+w_11040,lac u_d1
+w_11041,dac u_reloc
+w_11042,jmp r_getnum
+u_oprand,0000000
+        dap r_oprand
+        lac u_oprand
+w_11044,lac u_rator
+w_11045,sad u_o53
+w_11046,jmp u_opplus
+w_11047,sad u_o40
+w_11050,jmp u_opor
+w_11051,sad u_o55
+w_11052,jmp u_opminus
+u_opplus,lac u_value
+w_11054,add u_curval
+w_11055,dac u_curval
+w_11056,lac u_curreloc
+w_11057,add u_reloc
+w_11060,dac u_curreloc
+w_11061,jmp u_retop
+u_opor, lac u_value
+w_11063,lia
+w_11064,lac u_curval
+w_11065,dac x_t
+        lai
+        ior x_t
+w_11066,dac u_curval
+w_11067,jmp w_11056
+u_opminus,lac u_curval
+w_11071,cma
+        sub [1]
+w_11072,add u_value
+w_11073,cma
+        sub [1]
+w_11074,dac u_curval
+w_11075,lac u_reloc
+w_11076,cma
+        sub [1]
+w_11077,add u_d1
+w_11100,add u_curreloc
+w_11101,dac u_curreloc
+u_retop,lac u_o40
+w_11103,dac u_rator
+w_11104,dac u_opfound
+w_11105,jmp r_oprand
+u_prasc,0000000
+w_11107,jda u_wchar
+w_11110,jmp i u_prasc
+u_prsym,0000000
+        dap r_prsym
+        lac u_prsym
+w_11112,dac u_word
+w_11113,dzm u_relflg
+w_11114,dzm u_relocflg
+w_11115,jmp h_p1
+w_11116,and u_o760000
+w_11117,sad u_o760000
+w_11120,jmp u_plaw
+w_11121,sad u_o20000
+w_11122,jmp u_pcal
+w_11123,and u_o740000
+w_11124,sad u_o640000
+w_11125,jmp u_peae
+w_11126,sad u_o740000
+w_11127,jmp u_popr
+w_11130,sad u_o700000
+w_11131,jmp u_piot
+w_11132,sza i
+w_11133,jmp u_poct
+w_11134,jda u_nlsearch
+w_11135,jmp u_poct
+w_11136,jda u_wrname
+w_11137,lac u_o40
+w_11140,jda u_wchar
+w_11141,lac u_word
+w_11142,and u_o20000
+w_11143,sza i
+w_11144,jmp u_symadr
+w_11145,lac u_o151040
+w_11146,jda u_wchar
+w_11147,lac u_word
+w_11150,xor u_o20000
+w_11151,dac u_word
+u_symadr,lac u_d1
+w_11153,dac u_relflg
+w_11154,dac u_relocflg
+w_11155,lac u_word
+w_11156,and h_am
+w_11157,add u_mrelocv
+w_11160,sma
+w_11161,jmp u_pradr
+w_11162,add u_relocval
+w_11163,dzm u_relocflg
+u_pradr,dac u_addr
+w_11165,jda u_nlsearch
+w_11166,jmp u_octala
+u_pr1,  dzm u_relflg
+w_11170,jda u_wrname
+w_11171,lac u_value
+w_11172,sad u_addr
+w_11173,jmp r_prsym
+w_11174,cma
+        sub [1]
+w_11175,add u_d1
+w_11176,add u_addr
+w_11177,sma
+w_11200,jmp w_11207
+w_11201,cma
+        sub [1]
+w_11202,add u_d1
+w_11203,dac u_addr
+w_11204,lac u_o55
+w_11205,jda u_wchar
+w_11206,jmp w_11212
+w_11207,dac u_addr
+w_11210,lac u_o53
+w_11211,jda u_wchar
+w_11212,lac u_addr
+w_11213,jda u_octw
+w_11214,0000001
+w_11215,jmp r_prsym
+u_plaw, lac u_d1
+w_11217,dac u_relocflg
+w_11220,lac u_word
+w_11221,and h_am
+w_11222,add u_mrelocv
+w_11223,sma
+w_11224,jmp w_11227
+w_11225,add u_relocval
+w_11226,dzm u_relocflg
+w_11227,dac u_addr
+w_11230,lac [0760000]
+w_11231,dac u_relflg
+w_11232,lac u_addr
+w_11233,jda u_nlsearch
+w_11234,jmp u_poct
+w_11235,dac u_symindex
+w_11236,law u_laws
+w_11237,jda u_wrname
+w_11240,lac u_o40
+w_11241,jda u_wchar
+w_11242,lac u_symindex
+w_11243,jmp u_pr1
+w_11244,0000000
+w_11245,0000000
+u_peae, lac u_word
+w_11247,jda u_nlsearch
+w_11250,jmp w_11253
+w_11251,jda u_wrname
+w_11252,jmp r_prsym
+w_11253,lac u_word
+w_11254,and u_o777700
+w_11255,jda u_nlsearch
+w_11256,jmp w_11267
+w_11257,jda u_wrname
+w_11260,lac u_o40
+w_11261,jda u_wchar
+w_11262,lac u_word
+w_11263,and u_o77
+w_11264,jda u_octw
+w_11265,0000001
+w_11266,jmp r_prsym
+w_11267,law u_eaes
+w_11270,dac u_addr
+w_11271,jmp u_nfnd
+u_popr, law u_oprs
+w_11273,jmp w_11275
+u_piot, law u_iots
+w_11275,dac u_addr
+w_11276,lac u_word
+w_11277,jda u_nlsearch
+w_11300,jmp u_nfnd
+w_11301,jda u_wrname
+w_11302,jmp r_prsym
+u_nfnd, lac u_addr
+w_11304,jda u_wrname
+u_octala,dzm u_relflg
+w_11306,lac u_o40
+w_11307,jda u_wchar
+w_11310,lac u_word
+w_11311,and h_om
+w_11312,lia
+w_11313,lac u_relocflg
+w_11314,sza i
+w_11315,jmp w_11321
+w_11316,lai
+w_11317,add u_mrelocv
+w_11320,lia
+w_11321,lai
+w_11322,jda u_octw
+w_11323,0000001
+w_11324,lac u_relocflg
+w_11325,sza i
+w_11326,jmp r_prsym
+w_11327,lac u_o162
+w_11330,jda u_wchar
+w_11331,dzm u_relocflg
+w_11332,jmp r_prsym
+u_poct, lac u_word
+w_11334,jda u_octw
+w_11335,0000006
+w_11336,jmp r_prsym
+u_pcal, lac u_word
+w_11340,sza i
+w_11341,jmp u_poct
+w_11342,and u_o17777
+w_11343,jda u_nlsearch
+w_11344,jmp w_11355
+w_11345,dac u_addr
+w_11346,law u_syss
+w_11347,jda u_wrname
+w_11350,lac u_o40
+w_11351,jda u_wchar
+w_11352,lac u_addr
+w_11353,jda u_wrname
+w_11354,jmp r_prsym
+w_11355,lac u_word
+w_11356,and u_o20000
+w_11357,sza
+w_11360,jmp u_poct
+w_11361,jmp u_symadr
+u_wrname,0000000
+        dap r_wrname
+        lac u_wrname
+w_11363,add u_dm1
+w_11364,dac 012
+w_11365,law i 04
+w_11366,dac w_11410
+w_11367,idx 012
+        lac i 012
+w_11370,dac w_11407
+w_11371,lia
+w_11372,cla
+w_11373,dac x_lnk
+        rcl 9s
+        swp
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+        swp
+w_11374,sad u_o40
+w_11375,jmp r_wrname
+w_11376,jda u_wchar
+w_11377,lac w_11407
+w_11400,and u_o177
+w_11401,sad u_o40
+w_11402,jmp r_wrname
+w_11403,jda u_wchar
+w_11404,idx w_11410
+        sza
+w_11405,jmp w_11367
+w_11406,jmp r_wrname
+w_11407,0000000
+w_11410,0000000
+u_nlsearch,0000000
+        dap r_nlsearch
+        lac u_nlsearch
+w_11412,dac u_match
+w_11413,lac u_brack
+w_11414,dac u_best
+w_11415,dzm u_minp
+w_11416,lac u_nlbufp
+w_11417,add u_dm6
+w_11420,dac u_cnlp
+u_nloop,lac u_cnlp
+w_11422,add u_d6
+w_11423,dac u_cnlp
+w_11424,lia
+w_11425,cma
+        sub [1]
+w_11426,add u_nlsize
+w_11427,sma i
+w_11430,jmp u_nlend
+w_11431,lac u_nsearch
+w_11432,sza
+w_11433,jmp u_testn
+w_11434,lai
+w_11435,add u_d3
+w_11436,dac u_np
+w_11437,lac i u_np
+w_11440,sza i
+w_11441,jmp u_nloop
+w_11442,dac x_ac
+        idx u_np
+        sza
+        jmp s_11442
+        lac x_ac
+        jmp w_11444
+s_11442,lac x_ac
+w_11443,lac i u_np
+w_11444,dac u_treloc
+w_11445,sad u_relocflg
+w_11446,sma spa
+w_11447,jmp u_nloop
+w_11450,dac x_ac
+        idx u_np
+        sza
+        jmp s_11450
+        lac x_ac
+        jmp w_11452
+s_11450,lac x_ac
+w_11451,lac i u_np
+w_11452,dac u_tvalue
+w_11453,sad u_match
+w_11454,jmp u_nlok
+w_11455,lac u_relocflg
+w_11456,sza i
+w_11457,jmp u_nloop
+w_11460,lac u_relflg
+w_11461,sza i
+w_11462,jmp u_nloop
+w_11463,law i 01
+w_11464,add u_tvalue
+w_11465,cma
+        sub [1]
+w_11466,add u_match
+w_11467,sma i
+w_11470,jmp u_nloop
+w_11471,dac w_11514
+w_11472,add u_mbrack
+w_11473,sma
+w_11474,jmp u_nloop
+w_11475,lac u_best
+w_11476,cma
+        sub [1]
+w_11477,add u_d1
+w_11500,add w_11514
+w_11501,sma
+w_11502,jmp u_nloop
+w_11503,lac w_11514
+w_11504,dac u_best
+w_11505,lac u_tvalue
+w_11506,dac u_value
+w_11507,lac u_treloc
+w_11510,dac u_reloc
+w_11511,lac u_cnlp
+w_11512,dac u_minp
+w_11513,jmp u_nloop
+w_11514,0000000
+u_testn,lai
+w_11516,dac u_minp
+w_11517,law i 04
+w_11520,dac u_value
+w_11521,lac u_match
+w_11522,dac u_inbuf
+w_11523,lac i u_minp
+w_11524,sad i u_inbuf
+w_11525,sma spa
+w_11526,jmp u_nloop
+w_11527,idx u_minp
+        sza i
+        jmp w_11531
+w_11530,idx u_inbuf
+        sza i
+        jmp w_11532
+w_11531,idx u_value
+        sza
+w_11532,jmp w_11523
+w_11533,lac i u_minp
+w_11534,dac u_treloc
+w_11535,dac x_ac
+        idx u_minp
+        sza
+        jmp s_11535
+        lac x_ac
+        jmp w_11537
+s_11535,lac x_ac
+w_11536,lac i u_minp
+w_11537,dac u_tvalue
+w_11540,jmp u_nlok
+u_nlend,lac u_relflg
+w_11542,sza i
+w_11543,jmp r_nlsearch
+w_11544,lac u_dotrel
+w_11545,sad u_relocflg
+w_11546,sma spa
+w_11547,jmp w_11575
+w_11550,law i 01
+w_11551,add u_curdot
+w_11552,cma
+        sub [1]
+w_11553,add u_match
+w_11554,sma i
+w_11555,jmp w_11560
+w_11556,cma
+        sub [1]
+w_11557,add u_d1
+w_11560,add u_brack
+w_11561,sma i
+w_11562,jmp w_11575
+w_11563,add u_mbrack
+w_11564,add u_best
+w_11565,sma i
+w_11566,jmp w_11575
+w_11567,lac u_curdot
+w_11570,dac u_value
+w_11571,lac u_dotrel
+w_11572,dac u_reloc
+w_11573,law u_o56040
+w_11574,dac u_minp
+w_11575,lac u_minp
+w_11576,sza i
+        jmp w_11600
+w_11577,dac x_ac
+        idx r_nlsearch
+        lac x_ac
+w_11600,jmp r_nlsearch
+u_nlok, lac u_tvalue
+w_11602,dac u_value
+w_11603,lac u_treloc
+w_11604,dac u_reloc
+w_11605,lac u_cnlp
+w_11606,dac x_ac
+        idx r_nlsearch
+        lac x_ac
+w_11607,jmp r_nlsearch
+u_nlerr,lac [0760000]
+w_11611,dac u_errf
+w_11612,jmp r_nlsearch
+u_rch,  0000000
+        dap r_rch
+        lac u_rch
+w_11614,lac u_nchar1
+w_11615,dzm u_nchar1
+w_11616,sza
+w_11617,jmp r_rch
+w_11620,lac u_nchar
+w_11621,dzm u_nchar
+w_11622,sza
+w_11623,jmp r_rch
+w_11624,cla
+w_11625,cal 04
+w_11626,u_char
+w_11627,0000001
+w_11630,lac u_char
+w_11631,and u_o177
+w_11632,dac u_nchar
+w_11633,lac u_char
+w_11634,dac x_lnk
+        scr 9s
+w_11635,sza i
+w_11636,jmp w_11620
+w_11637,jmp r_rch
+u_wchar,0000000
+        dap r_wchar
+        lac u_wchar
+w_11641,dac u_char
+w_11642,lac u_d1
+w_11643,cal 05
+w_11644,u_char
+w_11645,0000001
+w_11646,jmp r_wchar
+u_octw, 0000000
+        dap r_octw
+        lac u_octw
+w_11650,dac x_ac
+        idx r_octw
+        lac x_ac
+w_11651,lia
+w_11652,cla
+        dzm x_lnk
+w_11653,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11654,dac x_lnk
+        ral 6s
+        and [0777700]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000077]
+        ior x_t
+w_11655,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11656,add u_o60060
+w_11657,dac u_obuf
+w_11660,cla
+w_11661,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11662,dac x_lnk
+        ral 6s
+        and [0777700]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000077]
+        ior x_t
+w_11663,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11664,add u_o60060
+w_11665,dac u_obuf+01
+w_11666,cla
+w_11667,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11670,dac x_lnk
+        ral 6s
+        and [0777700]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000077]
+        ior x_t
+w_11671,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_11672,add u_o60060
+w_11673,dac u_obuf+02
+w_11674,lac u_d1
+w_11675,cal 05
+w_11676,u_obuf
+w_11677,0000003
+w_11700,jmp r_octw
+u_m10,  0777765
+u_o54,  0000054
+u_d6,   0000006
+u_o52012,0052012
+u_d5,   0000005
+u_d9,   0000011
+u_d12,  0000014
+u_d8,   0000010
+u_d3,   0000003
+u_o177, 0000177
+u_o136, 0000136
+u_o45,  0000045
+u_sysflag,0000000
+u_char, 0000000
+u_d2,   0000002
+u_o162012,0162012
+u_mrelocv,0767777
+u_relocval,0010000
+u_nwords,0000000
+u_errf, 0000000
+u_rator,0000000
+u_d1,   0000001
+u_errmes,0077012
+u_o12,  0000012
+u_curval,0000000
+u_curreloc,0000000
+u_curdot,0000000
+u_dotrel,0000000
+u_value,0000000
+u_reloc,0000000
+u_o77,  0000077
+u_o57,  0000057
+u_o72,  0000072
+u_o50,  0000050
+u_type, u_prdec
+u_o162, 0000162
+u_nl,   0000012
+u_om100,0777677
+u_symbuf,
+        table 05, 0
+u_inbuf,
+        table 0100, 0
+u_o100, 0000100
+u_opfound,0000000
+u_wcore,0000000
+u_symindex,0000000
+u_rcore,0000000
+u_o56,  0000056
+u_om60, 0777717
+u_om10, 0777767
+u_om141,0777636
+u_o141, 0000141
+u_o044, 0000044
+w_12067,0000151
+u_o161, 0000161
+u_om101,0777676
+u_om32, 0777745
+u_o40,  0000040
+u_o55,  0000055
+u_o53,  0000053
+u_symbufp,0000000
+u_symcnt,0000000
+u_nopcom,nop
+w_12101,law i 06
+u_d10,  0000012
+u_trafill,jmp u_fill
+u_nchar1,0000000
+u_nchar,0000000
+u_o177000,0177000
+u_o56040,0056040
+u_nsearch,0000000
+u_word, 0000000
+u_relflg,0000000
+u_relocflg,0000000
+u_o740000,0740000
+u_o640000,0640000
+u_o700000,0700000
+u_o17777,0017777
+u_o20000,0020000
+u_o10000,0010000
+u_o151040,0151040
+u_eaes, 0145141
+w_12124,0145040
+u_laws, 0154141
+w_12126,0167040
+u_oprs, 0157160
+w_12130,0162040
+u_iots, 0151157
+w_12132,0164040
+u_syss, 0163171
+w_12134,0163040
+u_corename,0143157
+w_12136,0162145
+w_12137,0040040
+w_12140,0040040
+u_nlname,0156056
+w_12142,0157165
+w_12143,0164040
+w_12144,0040040
+u_dotdot,0056056
+w_12146,0040040
+w_12147,0040040
+w_12150,0040040
+u_addr, 0000000
+u_o37777,0037777
+u_dm1,  0777776
+u_match,0000000
+u_rwdflg,0000000
+w_12156,x_end
+u_nlsize,0000000
+u_dm6,  0777771
+u_cnlp, 0000000
+u_o377777,0377777
+u_minp, 0000000
+u_d4,   0000004
+u_np,   0000000
+u_nlcnt,0000000
+u_obuf,
+        table 03, 0
+u_o60060,0060060
+u_o75,  0000075
+u_best, 0000000
+u_o60000,0060000
+u_comflg,0000000
+w_12177,x_end
+u_brack,0000036
+u_mbrack,0777741
+u_o777700,0777700
+u_o41,  0000041
+u_o42,  0000042
+u_o760000,0760000
+u_o40000,0040000
+u_tvalue,0000000
+u_treloc,0000000
+u_o151, 0000151
+u_o47,  0000047
+u_o52,  0000052
+u_indflg,0000000
+u_o74,  0000074
+u_o76,  0000076
+u_nlbufp,x_end
+// By hand, db on PDP-1 code.
+// Every program on the drum is PDP-1 code but an a.out that as1 has not yet seen.
+// db reads that one as 1970's db did (PDP-7 code), and every other file in PDP-1 mode.
+// In PDP-1 mode relocval is 0, so an address is the file's offset, and the address
+// masks are the PDP-1's 07777 (h_am, h_om).
+// prsym names a word by the PDP-1's opcodes from the table h_tab, never from n.out
+// (h_p1), and a typed name is looked up in the table before n.out (h_gs).
+// These words sit after the program, ahead of the name list, since 024-077 cannot hold
+// them.
+h_p7,   0                               // 1 when the file is PDP-7 code
+h_am,   07777                           // the address mask, 017777 for PDP-7 code
+h_om,   07777                           // octala's mask, 037777 for PDP-7 code
+
+// h_md -- set the mode, from u_start, before n.out is read over the shell's arguments.
+// The file is PDP-7 code when it is named a.out and a.rel's head word 2, as's final
+// "..", is 4096 (as1's test, as1.am1).
+// Then db.s:25 goes on.
+// Entered by jmp from u_start; leaves by jmp to w_10021 with AC = nlbufp.
+// AC and IO are clobbered.
+h_md,   lac u_rcorep                    // the file's name, "a.out" in three words
+        dac h_fq
+        law h_aout
+        dac h_fv
+        law i 3
+        dac h_fc
+h_md1,  lac i h_fq
+        sas i h_fv
+        jmp h_md9                       // not a.out, so PDP-1 code
+        idx h_fq
+        idx h_fv
+        isp h_fc
+        jmp h_md1
+        cal 03                          // sys open; a.rel; 0
+        h_arel
+        0
+        spa
+        jmp h_md9                       // no a.rel, so PDP-1 code
+        dac h_fc
+        cal 04                          // sys read; inbuf; 3, the head's first words
+        u_inbuf
+        3
+        lac h_fc
+        cal 011                         // sys close
+        lac u_inbuf+2                   // still 0 if the read came short
+        sas u_o10000
+        jmp h_md9                       // ".." not 4096 (0 in a B program), so PDP-1 code
+        lac u_d1
+        dac h_p7
+        lac u_o17777
+        dac h_am
+        lac u_o37777
+        dac h_om
+h_md9,  lac u_nlbufp
+        jmp w_10021
+
+// h_dd -- db.s:67, the search for "..", which sets relocval.
+// In PDP-1 mode relocval is 0 whatever ".." says (an as1 program's n.out keeps 4096).
+// Entered by jmp from w_10074; leaves by jmp to w_10075 with AC the address of dotdot
+// for PDP-7 code, else by jmp to mloop.
+// AC is not preserved, IO is preserved.
+h_dd,   lac h_p7
+        sza i
+        jmp h_dd1
+        law u_dotdot
+        jmp w_10075
+h_dd1,  dzm u_relocval
+        dzm u_mrelocv
+        jmp u_mloop
+
+// h_gs -- db.s:585, a typed name not ".".
+// In PDP-1 mode the table is searched first, its two words of name against symbuf's
+// first two, for an absolute value; then n.out, as 1970's db searched it.
+// A name longer than three characters matches no entry, since symbuf holds no space
+// before the name's end.
+// Entered by jmp from w_10772.
+// Found, it sets value, and reloc to 0, and leaves by jmp to getsym's return.
+// Otherwise it leaves by jmp to w_10773 with AC the address of symbuf.
+// AC is not preserved, IO is preserved.
+h_gs,   lac h_p7
+        sza
+        jmp h_gs9
+        law h_tab
+        dac h_fq
+h_gs1,  lac h_fq
+        sad h_tep
+        jmp h_gs9                       // not in the table
+        dac h_fv
+        lac i h_fv
+        sas u_symbuf
+        jmp h_gs2
+        idx h_fv
+        lac i h_fv
+        sas u_symbuf+1
+        jmp h_gs2
+        idx h_fv
+        lac i h_fv
+        dac u_value
+        dzm u_reloc
+        jmp r_getsym
+h_gs2,  lac h_fq
+        add u_d3
+        dac h_fq
+        jmp h_gs1
+h_gs9,  law u_symbuf
+        jmp w_10773
+
+// h_p1 -- prsym, from db.s:687, with u_word the word.
+// PDP-7 code goes on in 1970's prsym, at w_11116 with AC the word.
+// In PDP-1 mode the word is named by the PDP-1's instruction classes.
+// Each path ends at prsym's return, r_prsym, as 1970's do.
+// Entered by jmp from w_11115.
+// AC and IO are clobbered.
+h_p1,   dzm u_nsearch
+        lac h_p7
+        sza i
+        jmp h_p2
+        lac u_word
+        jmp w_11116
+h_p2,   lac u_word
+        and h_m77
+        sad h_c016
+        jmp h_pcal                      // cal, no indirect bit, so sys
+        and u_o760000
+        sad u_o640000
+        jmp h_pskp
+        sad h_c066
+        jmp h_psh
+        sad u_o700000
+        jmp h_plaw
+        sad h_c072
+        jmp h_piot
+        sad u_o760000
+        jmp h_popr
+// A memory instruction prints as its name, i, and its address as 1970's symadr names it.
+// jda's opcode holds the indirect bit, so the opcode with the bit is looked up first.
+        dzm h_ind
+        law h_dmem
+        dac h_fd
+        lac u_word
+        and h_m77
+        jda h_fx
+        jmp h_pm1
+        jmp h_pm2
+h_pm1,  lac u_word
+        and u_o10000
+        dac h_ind
+        lac u_word
+        and u_o760000
+        jda h_fx
+        jmp u_poct                      // not in the table, so the word in octal
+h_pm2,  jda h_wn
+        lac h_ind
+        sza i
+        jmp u_symadr
+        lac u_o151040                   // "i "
+        jda u_wchar
+        jmp u_symadr
+
+// sys and the call's name from n.out's absolute names, as 1970's pcal; else its number.
+h_pcal, law u_syss
+        jda h_wn
+        lac u_word
+        and h_am
+        jda u_nlsearch                  // relflg and relocflg 0, so an exact absolute name
+        jmp h_pc1
+        jmp h_pnm
+h_pc1,  lac u_word
+        and h_am
+        jmp h_poc
+
+// A skip prints as the names of its bits, skp when it has none.
+// Each exact name in the table is one bit's, or skp's with none, so naming the bits
+// gives every word the name an exact lookup would.
+h_pskp, law h_dskb
+        dac h_fd
+        law h_tskp
+        jmp h_bits
+
+// An operate word prints as nop for 0760000, the table's first name for it.
+// Any other prints as its bits' names, opr when it has none.
+// The other exact names are one bit's, or lat's and swp's, which the bits name first.
+h_popr, lac u_word
+        sad u_o760000
+        jmp h_pop1
+        law h_dob
+        dac h_fd
+        law h_eopr
+        jmp h_bits
+h_pop1, law h_topr
+        jmp h_pnm
+
+// A shift prints as its name, and its count's bits unless they are 0 (the exact name),
+// else in octal.
+h_psh,  law h_dsh
+        dac h_fd
+        lac u_word
+        and h_m777
+        jda h_fx
+        jmp u_poct
+        jda u_wrname
+        lac u_word
+        and h_c777
+        sza i
+        jmp r_prsym
+        dac h_bt
+        lac u_o40
+        jda u_wchar
+        lac h_bt
+        jmp h_poc
+
+// A law goes to 1970's plaw, which names its address; a law i prints as law i and its
+// number.
+h_plaw, lac u_word
+        and u_o10000
+        sza i
+        jmp u_plaw
+        law u_laws
+        jda h_wn
+        lac u_o151040                   // "i "
+        jda u_wchar
+        lac u_word
+        and h_am
+        jmp h_poc
+
+// An IOT prints as lem or eem, else as iot and the word's low 13 bits.
+h_piot, law h_diot
+        dac h_fd
+        lac u_word
+        jda h_fx
+        jmp h_pi1
+        jmp h_pnm
+h_pi1,  law u_iots
+        jda h_wn
+        lac u_word
+        and u_o17777
+        jmp h_poc
+
+// The ends, a name at AC or AC in octal (octw's six digits), then prsym's return.
+h_pnm,  jda u_wrname
+        jmp r_prsym
+h_poc,  jda u_octw
+        0                               // octw's argument word, which it skips
+        jmp r_prsym
+
+// h_bits -- print a skp or opr word with no single name as the names of the bits it
+// holds, from the range at h_fd (a pair before the bits it holds), or as AC's entry,
+// the class's name, when it holds none.
+// Then i, then any bits left, in octal.
+// h_fc holds the class's entry until a bit is named, then 0.
+// Entered by jmp with AC the class's entry; ends at prsym's return.
+// AC and IO are clobbered.
+h_bits, dac h_fc
+        lac u_word
+        and h_am
+        dac h_left
+        lac i h_fd
+        dac h_fq
+        idx h_fd
+        lac i h_fd
+        dac h_fe
+h_bt1,  lac h_fq
+        sad h_fe
+        jmp h_bt5
+        add u_d2
+        dac h_fv
+        lac i h_fv
+        and h_am
+        dac h_bt                        // the entry's bits
+        and h_left
+        sas h_bt
+        jmp h_bt4                       // not all of them set
+        lac h_fc
+        sza
+        jmp h_bt2                       // the first name, with no space before it
+        lac u_o40
+        jda u_wchar
+h_bt2,  dzm h_fc
+        lac h_fq
+        jda u_wrname
+        lac h_left
+        xor h_bt
+        dac h_left
+h_bt4,  idx h_fv
+        dac h_fq
+        jmp h_bt1
+h_bt5,  lac h_fc
+        sza i
+        jmp h_bt6
+        jda u_wrname
+h_bt6,  lac u_word
+        and u_o10000
+        sza i
+        jmp h_bt7
+        lac h_spi                       // " i"
+        jda u_wchar
+h_bt7,  lac h_left
+        sza i
+        jmp r_prsym
+        lac u_o40
+        jda u_wchar
+        lac h_left
+        jmp h_poc
+
+// h_wn -- write the name at AC, then a space.
+// AC and IO are clobbered.
+// Called via jda.
+h_wn,   0
+        dap h_wnr
+        lac h_wn
+        jda u_wrname
+        lac u_o40
+        jda u_wchar
+h_wnr,  jmp 0
+
+// h_fx -- find the first entry in the range at h_fd whose value is AC.
+// h_fd holds the address of a pair, the range's first entry's address and the address
+// past its last.
+// A skip return when found, with AC the entry's address; no skip otherwise.
+// AC is not preserved, IO is preserved; h_fd is kept.
+// Called via jda.
+h_fx,   0                               // the value sought
+        dap h_fxr
+        lac h_fd
+        dac h_fv
+        lac i h_fv
+        dac h_fq
+        idx h_fv
+        lac i h_fv
+        dac h_fe
+h_fx1,  lac h_fq
+        sad h_fe
+        jmp h_fxr                       // none
+        add u_d2
+        dac h_fv
+        lac i h_fv
+        sad h_fx
+        jmp h_fx2
+        idx h_fv
+        dac h_fq
+        jmp h_fx1
+h_fx2,  idx h_fxr
+        lac h_fq
+h_fxr,  jmp 0
+
+h_ind,  0                               // the memory instruction's indirect bit
+h_fd,   0                               // a range, the address of its pair of bounds
+h_fq,   0                               // the entry
+h_fe,   0                               // past the range's last entry
+h_fv,   0                               // the entry's value word
+h_fc,   0
+h_bt,   0                               // an entry's bits
+h_left, 0                               // the word's bits not yet named
+h_m77,  0770000
+h_c016, 0160000
+h_c066, 0660000
+h_c072, 0720000
+h_m777, 0777000
+h_c777, 0000777
+h_spi,  0040151                         // " i"
+h_aout, 0141056; 0157165; 0164040       // "a.out"
+h_arel, 0141056; 0162145; 0154040; 0040040 // "a.rel"
+h_tep,  h_tend
+// The ranges of h_tab, each its first entry and the entry past its last.
+h_dmem, h_tmem                          // the memory instructions
+        h_tskp
+h_dskb, h_tskb                          // the skips' bits
+h_dsh,  h_tsh                           // the shifts
+        h_tlaw
+h_diot, h_tiot                          // lem and eem
+        h_topr
+h_dob,  h_tob                           // the operate bits, a pair before its bits
+        h_toth
+// The PDP-1's instruction names, 56 entries.
+// Each is two words of name in n.out's packing, then the value.
+// An exact value takes the first entry with it (nop before opr).
+h_tab,
+h_tmem, 0141156; 0144040; 0020000       // and
+        0151157; 0162040; 0040000       // ior
+        0170157; 0162040; 0060000       // xor
+        0170143; 0164040; 0100000       // xct
+        0143141; 0154040; 0160000       // cal
+        0152144; 0141040; 0170000       // jda
+        0154141; 0143040; 0200000       // lac
+        0154151; 0157040; 0220000       // lio
+        0144141; 0143040; 0240000       // dac
+        0144141; 0160040; 0260000       // dap
+        0144151; 0160040; 0300000       // dip
+        0144151; 0157040; 0320000       // dio
+        0144172; 0155040; 0340000       // dzm
+        0141144; 0144040; 0400000       // add
+        0163165; 0142040; 0420000       // sub
+        0151144; 0170040; 0440000       // idx
+        0151163; 0160040; 0460000       // isp
+        0163141; 0144040; 0500000       // sad
+        0163141; 0163040; 0520000       // sas
+        0155165; 0154040; 0540000       // mul
+        0144151; 0166040; 0560000       // div
+        0152155; 0160040; 0600000       // jmp
+        0152163; 0160040; 0620000       // jsp
+h_tskp, 0163153; 0160040; 0640000       // skp
+h_tskb, 0163155; 0141040; 0640400       // sma
+        0163160; 0141040; 0640200       // spa
+        0163172; 0141040; 0640100       // sza
+        0163172; 0157040; 0641000       // szo
+        0163160; 0151040; 0642000       // spi
+h_tsh,  0162141; 0154040; 0661000       // ral
+        0162151; 0154040; 0662000       // ril
+        0162143; 0154040; 0663000       // rcl
+        0163141; 0154040; 0665000       // sal
+        0163151; 0154040; 0666000       // sil
+        0163143; 0154040; 0667000       // scl
+        0162141; 0162040; 0671000       // rar
+        0162151; 0162040; 0672000       // rir
+        0162143; 0162040; 0673000       // rcr
+        0163141; 0162040; 0675000       // sar
+        0163151; 0162040; 0676000       // sir
+        0163143; 0162040; 0677000       // scr
+h_tlaw, 0154141; 0167040; 0700000       // law
+h_tiot, 0154145; 0155040; 0720074       // lem
+        0145145; 0155040; 0724074       // eem
+h_topr, 0156157; 0160040; 0760000       // nop
+h_eopr, 0157160; 0162040; 0760000       // opr
+h_tob,  0154141; 0164040; 0762200       // lat
+        0163167; 0160040; 0760060       // swp
+        0143154; 0141040; 0760200       // cla
+        0143154; 0151040; 0764000       // cli
+        0143155; 0141040; 0761000       // cma
+        0150154; 0164040; 0760400       // hlt
+        0154151; 0141040; 0760020       // lia
+        0154141; 0151040; 0760040       // lai
+h_toth, 0151040; 0040040; 0010000       // i
+        0163171; 0163040; 0160000       // sys
+h_tend,
+x_end,
+0110/
+r_getexp,jmp 0
+r_getspec,jmp 0
+r_getsym,jmp 0
+r_getnum,jmp 0
+r_oprand,jmp 0
+r_prsym,jmp 0
+r_wrname,jmp 0
+r_nlsearch,jmp 0
+r_rch,  jmp 0
+r_wchar,jmp 0
+r_octw, jmp 0
+        constants
+start 020000

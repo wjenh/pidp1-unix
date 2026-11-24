@@ -1,0 +1,767 @@
+as1l
+// as1l is as1's fourth overlay, the third in the as1x file.
+// It finds the registers live after and before each code word.
+// See as1.am1.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+OV/
+// The live registers; then the first generator's overlay.
+        jda live
+        lac [OVG]
+        jmp ovload
+
+// The successors of code word k, into sl, sn of them.
+// sunk is set for a jump the rules cannot follow.
+// Entry: AC = k, IO = 0 for the flow (a jms also goes past its arguments and
+// to its routine's skip returns), 1 for the liveness (a jms goes into its
+// routine; an indirect jmp through an entry is the entry's returns, given as
+// the entry's index with the sign set).
+// translate.c's successors.
+// AC and IO are clobbered.
+// Called via jda.
+succ,   0
+        dap succx
+        dio smode
+        dzm sn
+        dzm sunk
+        lac succ
+        dac sk
+        jda getf
+        dac sf
+        lac sk
+        jda getv
+        dac kv
+        lac sf
+        and [CMASK]
+        sad [CMEM]
+        jmp sc1
+        sad [COPR]
+        jmp sc20
+        sad [CSYS]
+        jmp sc30
+        sad [CEAE]
+        jmp sc32
+        sad [CIOT]
+        jmp sc12
+        jmp sc11
+
+        // Memory reference.
+sc1,
+        jda tgt
+        lac kv
+        and [0740000]
+        sas [OJMP]
+        jmp sc5
+        lac kv
+        and [020000]
+        sza
+        jmp sc2
+        lac kt
+        spa
+        jmp succx
+        jda sadd
+        jmp succx
+sc2,
+        lac sf
+        and [FREL]
+        sza i
+        jmp sc3
+        lac kt
+        jda isent
+        sza i
+        jmp sc3
+        lac smode
+        sza i
+        jmp succx
+        lac kt
+        ior [0400000]
+        jda sadd
+        jmp succx
+sc3,
+        lac [1]
+        dac sunk
+        jmp succx
+
+        // jms.
+sc5,
+        sas [OJMS]
+        jmp sc10
+        lac kv
+        and [020000]
+        sza
+        jmp sc8
+        lac kt
+        jda isent
+        sza i
+        jmp sc8
+        lac kt
+        add [1]
+        jda sadd
+        lac smode
+        sza
+        jmp succx
+        lac sk
+        jda nargs
+        dac sna
+        lac kt
+        jda getf
+        and [CMASK]
+        sar 9s
+        sar 4s
+        dac snz
+        lac sna
+        dac sj
+sc6,
+        idx sj
+        cma
+        add snz
+        spa
+        jmp sc9
+        lac sk
+        add sj
+        add [1]
+        dac sb
+        jda codel
+        sza i
+        jmp sc6
+        lac sb
+        jda sadd
+        jmp sc6
+sc8,
+        lac [1]
+        dac sunk
+        lac smode
+        sza
+        jmp succx
+        lac sk
+        jda nargs
+        dac sna
+sc9,
+        lac sk
+        add sna
+        add [1]
+        jda sadd
+        jmp succx
+
+        // isz as a count, sad and xct go two ways.
+sc10,
+        sad [OSAD]
+        jmp sc12
+        sad [OXCT]
+        jmp sc12
+        sas [OISZ]
+        jmp sc11
+        lac sf
+        and [FCNT]
+        sza i
+        jmp sc11
+sc12,
+        lac sk
+        add [1]
+        jda sadd
+        lac sk
+        add [2]
+        jda sadd
+        jmp succx
+sc11,
+        lac sk
+        add [1]
+        jda sadd
+        jmp succx
+
+        // Operate.
+        // hlt stops; a skip goes two ways.
+sc20,
+        lac kv
+        and [040]
+        sza
+        jmp succx
+        lac kv
+        and [01700]
+        sza
+        jmp sc12
+        jmp sc11
+
+        // sys goes past its arguments, except exit, which stops.
+sc30,
+        lac kv
+        sad [020016]
+        jmp succx
+sc32,
+        lac sk
+        jda nargs
+        add sk
+        add [1]
+        jda sadd
+succx,  jmp .
+
+// Adds AC to sl, counted in sn.
+// Entry: AC = the successor.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+sadd,   0
+        dap saddx
+        lac sn
+        add [sl]
+        dac sp
+        lac sadd
+        dac i sp
+        idx sn
+saddx,  jmp .
+
+// The live registers after and before each code word, to a fixed point.
+// A routine's returns go to every caller's continuation and skip returns,
+// gathered at the callers into the entry's flags.
+// translate.c's liveness.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+live,   0
+        dap livex
+lv1,
+        dzm lchg
+
+        // Each entry's registers live after its returns.
+        dzm k
+lv2,
+        lac k
+        sub nw
+        sma
+        jmp lv10
+        lio [OJMS]
+        lac k
+        jda ismr
+        sza i
+        jmp lv9
+        lac k
+        jda getf
+        and [FREL]
+        sza i
+        jmp lv9
+        lac k
+        jda getv
+        dac kv
+        and [020000]
+        sza
+        jmp lv9
+        jda tgt
+        spa
+        jmp lv9
+        lac kt
+        jda isent
+        sza i
+        jmp lv9
+        lac kt
+        jda getf
+        dac lef
+        and [LOUT]
+        sar 6s
+        dac lr
+        lac lef
+        and [CMASK]
+        sar 9s
+        sar 4s
+        dac lnz
+        lac k
+        jda nargs
+        dac lna
+        dac lj
+lv3,
+        lac k
+        add lj
+        add [1]
+        dac lb
+        lac lj
+        sas lna
+        jmp lv4
+        lac lb
+        sub nk
+        sma
+        jmp lv5
+        jmp lv4a
+lv4,
+        lac lb
+        jda codel
+        sza i
+        jmp lv5
+lv4a,
+        lac lb
+        jda getf
+        and [LIN]
+        sar 3s
+        ior lr
+        dac lr
+lv5,
+        idx lj
+        cma
+        add lnz
+        sma
+        jmp lv3
+        lac kt
+        jda getf
+        dac lef
+        and [LOUT]
+        sar 6s
+        sad lr
+        jmp lv9
+        lac lr
+        sal 6s
+        dac lr
+        lac lef
+        and [0777077]
+        ior lr
+        dac i fptr
+        lac [1]
+        dac lchg
+lv9,
+        idx k
+        jmp lv2
+
+        // Each code word, from the last to the first.
+lv10,
+        lac nw
+        dac k
+lv11,
+        lac k
+        sza i
+        jmp lv20
+        law i 1
+        add k
+        dac k
+        jda kind
+        sas [KCODE]
+        jmp lv11
+        lio [1]
+        lac k
+        jda succ
+        dzm lout
+        lac sunk
+        sza i
+        jmp lv12
+        lac [3]
+        dac lout
+lv12,
+        dzm lj
+lv13,
+        lac lj
+        sub sn
+        sma
+        jmp lv16
+        lac lj
+        add [sl]
+        dac sp
+        lac i sp
+        spa
+        jmp lv14
+        dac lb
+        sub nk
+        sma
+        jmp lv15
+        lac lb
+        jda getf
+        and [LIN]
+        sar 3s
+        jmp lv14a
+lv14,
+        and [0377777]
+        jda getf
+        and [LOUT]
+        sar 6s
+lv14a,
+        ior lout
+        dac lout
+lv15,
+        idx lj
+        jmp lv13
+lv16,
+        lac lout
+        lio k
+        jda xfer
+        dac lin
+        lac lout
+        sal 3s
+        ior lin
+        sal 3s
+        dac lr
+        lac k
+        jda getf
+        dac lef
+        and [LOUT|LIN]
+        sad lr
+        jmp lv11
+        lac lef
+        and [0777007]
+        ior lr
+        dac i fptr
+        lac [1]
+        dac lchg
+        jmp lv11
+lv20,
+        lac lchg
+        sza
+        jmp lv1
+livex,  jmp .
+
+// The registers live before word k from those live after it (1 AC, 2 MQ, 4
+// the link), by the word's events in reverse order.
+// translate.c's transfer.
+// Entry: AC = live after, IO = k.
+// Exit: AC = live before.
+// IO is clobbered.
+// Called via jda.
+xfer,   0
+        dap xferx
+        dio xk
+        lac xk
+        jda getf
+        and [CMASK]
+        dac xc
+        lac xk
+        jda getv
+        dac xv
+        lac xc
+        sad [CMEM]
+        jmp xm
+        sad [CLAW]
+        jmp xl
+        sad [CLIT]
+        jmp xl
+        sad [CSYS]
+        jmp xs
+        sad [CIOT]
+        jmp xi
+        sad [COPR]
+        jmp xo
+        sad [CEAE]
+        jmp xe
+        jmp xr
+
+        // Memory reference.
+xm,
+        lac xv
+        and [0740000]
+        sad [OLAC]
+        jmp xl
+        sad [OTAD]
+        jmp xm1
+        sad [OXCT]
+        jmp xm2
+        sad [ODAC]
+        jmp xa
+        sad [OADD]
+        jmp xa
+        sad [OXOR]
+        jmp xa
+        sad [OAND]
+        jmp xa
+        sad [OSAD]
+        jmp xa
+        jmp xr
+xm1,
+        lac xfer
+        and [3]
+        ior [1]
+        jmp xferx
+xm2,
+        lac [7]
+        jmp xferx
+xa,
+        lac xfer
+        ior [1]
+        jmp xferx
+xl,
+        lac xfer
+        and [6]
+        jmp xferx
+xs,
+        lac xv
+        sad [020033]
+        jmp xs1
+        lac [1]
+        jmp xferx
+xs1,
+        lac [3]
+        jmp xferx
+xi,
+        lac xfer
+        ior [3]
+        jmp xferx
+xr,
+        lac xfer
+        jmp xferx
+
+        // Operate, in reverse order of its events.
+        // The rotate, oas, cml, cma, cll, cla, the senses.
+xo,
+        lac xv
+        and [030]
+        sza i
+        jmp xo2
+        dzm xn
+        lac xfer
+        and [5]
+        sza i
+        jmp xo1
+        lac [1]
+        dac xn
+xo1,
+        lac xfer
+        and [1]
+        sza i
+        jmp xo1a
+        lac xn
+        ior [4]
+        dac xn
+xo1a,
+        lac xfer
+        and [2]
+        ior xn
+        dac xfer
+xo2,
+        lac xv
+        and [05]
+        sza i
+        jmp xo3
+        lac xfer
+        ior [1]
+        dac xfer
+xo3,
+        lac xv
+        and [02]
+        sza i
+        jmp xo4
+        lac xfer
+        ior [4]
+        dac xfer
+xo4,
+        lac xv
+        and [04000]
+        sza i
+        jmp xo5
+        lac xfer
+        and [3]
+        dac xfer
+xo5,
+        lac xv
+        and [010000]
+        sza i
+        jmp xo6
+        lac xfer
+        and [6]
+        dac xfer
+xo6,
+        lac xv
+        and [0300]
+        sza i
+        jmp xo7
+        lac xfer
+        ior [1]
+        dac xfer
+xo7,
+        lac xv
+        and [0400]
+        sza i
+        jmp xr
+        lac xfer
+        ior [4]
+        jmp xferx
+
+        // EAE.
+xe,
+        lac xv
+        sad [0653122]
+        jmp xe1
+        sad [0653323]
+        jmp xe1
+        sas [0640323]
+        jmp xe2
+        lac [3]
+        jmp xferx
+xe1,
+        lac [1]
+        jmp xferx
+xe2,
+        lac xv
+        and [020000]
+        dac xsg
+        lac xv
+        and [0700]
+        sad [0500]
+        jmp xe5
+        sad [0600]
+        jmp xe6
+        sad [0700]
+        jmp xe7
+        sza
+        jmp xe8
+
+        // The setup group, cmq, omq and lacq.
+        lac xv
+        and [04]
+        sza i
+        jmp xe3
+        lac xfer
+        ior [2]
+        dac xfer
+xe3,
+        lac xv
+        and [02]
+        sza i
+        jmp xe10
+        lac xfer
+        ior [2]
+        dac xfer
+        lac xv
+        and [01000]
+        sza
+        jmp xe10
+        lac xfer
+        ior [1]
+        dac xfer
+        jmp xe10
+
+        // For lrs, AC if AC or MQ, MQ if MQ, the link if AC and not signed.
+xe5,
+        dzm xn
+        lac xfer
+        and [3]
+        sza i
+        jmp xe5a
+        lac [1]
+        dac xn
+xe5a,
+        lac xfer
+        and [2]
+        ior xn
+        dac xn
+        lac xfer
+        and [1]
+        jmp xe6b
+
+        // For lls, AC if AC, MQ if AC or MQ, the link if either and not
+        // signed.
+xe6,
+        lac xfer
+        and [1]
+        dac xn
+        lac xfer
+        and [3]
+        sza i
+        jmp xe6a
+        lac xn
+        ior [2]
+        dac xn
+xe6a,
+        lac xfer
+        and [3]
+xe6b,
+        sza i
+        jmp xe6c
+        lac xsg
+        sza
+        jmp xe6c
+        lac xn
+        ior [4]
+        dac xn
+xe6c,
+        lac xfer
+        and [4]
+        ior xn
+        dac xfer
+        jmp xe10
+
+        // For als, the link if AC and not signed.
+xe7,
+        lac xfer
+        and [1]
+        sza i
+        jmp xe10
+        lac xsg
+        sza
+        jmp xe10
+        lac xfer
+        ior [4]
+        dac xfer
+        jmp xe10
+xe8,
+        lac [7]
+        dac xfer
+
+        // Then clear AC, MQ |= AC, clear MQ, the sign to the link.
+xe10,
+        lac xv
+        and [01000]
+        sza i
+        jmp xe11
+        lac xfer
+        and [6]
+        dac xfer
+xe11,
+        lac xv
+        and [02000]
+        sza i
+        jmp xe12
+        lac xfer
+        and [5]
+        ior [1]
+        dac xfer
+        lac xv
+        and [010000]
+        sza
+        jmp xe12
+        lac xfer
+        ior [2]
+        dac xfer
+xe12,
+        lac xv
+        and [010000]
+        sza i
+        jmp xe13
+        lac xfer
+        and [5]
+        dac xfer
+xe13,
+        lac xsg
+        sza i
+        jmp xr
+        lac xfer
+        and [3]
+        ior [1]
+xferx,  jmp .
+
+// The liveness's words.
+k,      0
+smode,  0
+sn,     0
+sunk,   0
+sk,     0
+sf,     0
+sna,    0
+snz,    0
+sj,     0
+sb,     0
+sp,     0
+sl,                                 // the successors
+        table 020
+lchg,   0
+lef,    0
+lr,     0
+lnz,    0
+lna,    0
+lj,     0
+lb,     0
+lout,   0
+lin,    0
+xk,     0
+xc,     0
+xv,     0
+xn,     0
+xsg,    0
+
+#include "as1a.ac"
+
+        constants
+start 020000

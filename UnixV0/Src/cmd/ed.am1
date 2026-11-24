@@ -1,0 +1,1511 @@
+ed
+// Translated by as7am1 from the PDP-7 source cmd/ed1.s cmd/ed2.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, the regular expressions' words (ed2.s:180-407, below), in the
+// translator's free words from 024.
+h_exr,  0                               // a list entry's start word
+h_arg,  0                               // a character group's character word
+h_np,   0                               // the next word of the list being built
+h_ch,   0                               // the character being matched
+h_run,  0                               // the list being run
+h_nb,   0                               // the list being built
+h_cp,   0                               // the next word of compbuf
+h_c,    0                               // a character being compiled
+h_jsp,  jsp 0
+h_jxc,  jmp u_xchg
+h_jmch, jda h_mch
+h_jfnd, jda h_fnd
+h_jbol, jda h_mbol
+h_jeol, jda h_meol
+0100/
+        SYSFRAME()
+0145/
+w_10000,lac u_d1
+w_10001,cal 05
+w_10002,w_10041
+w_10003,0000003
+w_10004,lac u_o17
+w_10005,cal 06
+w_10006,u_tname
+w_10007,sma i
+w_10010,cal 01
+w_10011,dac u_sfo
+w_10012,cal 03
+w_10013,u_tname
+w_10014,0000000
+w_10015,sma i
+w_10016,cal 01
+w_10017,dac u_sfi
+w_10020,law i 01
+w_10021,add u_lnodp
+w_10022,dac u_zermp
+w_10023,add u_d1
+w_10024,dac u_zerop
+w_10025,dac u_dot
+w_10026,add u_d1
+w_10027,dac u_eofp
+w_10030,dzm i u_eofp
+w_10031,dzm i u_zerop
+w_10032,dzm u_lastre
+w_10033,dzm u_fbuf
+w_10034,lac u_d1
+w_10035,dac u_dskadr
+w_10036,dac u_wrflg
+w_10037,dzm u_diskin
+w_10040,jmp u_advanc
+w_10041,0145144
+w_10042,0151164
+w_10043,0000012
+u_advanc,jda u_rline
+w_10045,lac u_linep
+w_10046,dac u_tal
+w_10047,dzm u_adrflg
+w_10050,jda u_addres
+w_10051,jmp u_comand
+w_10052,law i 01
+w_10053,dac u_adrflg
+w_10054,lac u_addr
+w_10055,dac u_addr1
+w_10056,dac u_addr2
+w_10057,lac u_char
+w_10060,sad u_o54
+w_10061,jmp w_10067
+w_10062,sad u_o73
+w_10063,sma spa
+w_10064,jmp u_chkwrp
+w_10065,lac u_addr
+w_10066,dac u_dot
+w_10067,jda u_addres
+w_10070,jmp u_error
+w_10071,lac u_addr2
+w_10072,dac u_addr1
+w_10073,lac u_addr
+w_10074,dac u_addr2
+w_10075,jmp w_10057
+u_chkwrp,law i 01
+w_10077,add u_addr1
+w_10100,jda u_betwen
+w_10101,u_d1
+w_10102,u_addr2
+w_10103,jmp u_error
+u_comand,lac u_char
+w_10105,sad u_o141
+w_10106,jmp u_ca
+w_10107,sad u_o143
+w_10110,jmp u_cc
+w_10111,sad u_o144
+w_10112,jmp u_cc
+w_10113,sad u_o160
+w_10114,jmp u_cp
+w_10115,sad u_o161
+w_10116,jmp u_cq
+w_10117,sad u_o162
+w_10120,jmp u_cr
+w_10121,sad u_o163
+w_10122,jmp u_cs
+w_10123,sad u_o167
+w_10124,jmp u_cw
+w_10125,sad u_o12
+w_10126,jmp u_cnl
+w_10127,sad u_o75
+w_10130,jmp u_ceq
+w_10131,jmp u_error
+u_ca,   jda u_newline
+w_10133,jda u_setfl
+w_10134,lac u_addr2
+w_10135,dac u_dot
+u_ca1,  jda u_rline
+w_10137,lac u_line
+w_10140,sad u_o56012
+w_10141,jmp u_advanc
+w_10142,jda u_append
+w_10143,jmp u_ca1
+u_cc,   jda u_newline
+w_10145,jda u_setdd
+w_10146,lac u_addr1
+w_10147,sad u_zerop
+w_10150,jmp u_error
+w_10151,dac u_dot
+w_10152,add u_dm1
+w_10153,dac 011
+w_10154,lac u_addr2
+w_10155,dac 010
+w_10156,idx 010
+        lac i 010
+w_10157,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_10160,sza
+w_10161,jmp w_10156
+w_10162,lac 011
+w_10163,dac u_eofp
+w_10164,lac u_char
+w_10165,sad u_o144
+w_10166,jmp u_advanc
+w_10167,law i 01
+w_10170,add u_dot
+w_10171,dac u_dot
+w_10172,jmp u_ca1
+u_cp,   jda u_newline
+u_cp1,  jda u_setdd
+w_10175,lac u_addr1
+w_10176,sad u_zerop
+w_10177,jmp u_error
+w_10200,lac u_addr1
+w_10201,dac u_dot
+w_10202,lac i u_addr1
+w_10203,jda u_gline
+w_10204,dac w_10210
+w_10205,lac u_d1
+w_10206,cal 05
+w_10207,u_line
+w_10210,0000000
+w_10211,lac u_addr1
+w_10212,sad u_addr2
+w_10213,jmp u_advanc
+w_10214,add u_d1
+w_10215,dac u_addr1
+w_10216,jmp w_10200
+u_cq,   jda u_newline
+w_10220,lac u_adrflg
+w_10221,sza
+w_10222,jmp u_error
+w_10223,cal 016
+u_cr,   jda u_setfl
+w_10225,lac u_addr2
+w_10226,dac u_dot
+w_10227,jda u_rname
+w_10230,cal 03
+w_10231,u_fbuf
+w_10232,0000000
+w_10233,sma i
+w_10234,jmp u_error
+w_10235,dac u_tfi
+w_10236,lac u_linep
+w_10237,dac u_tal
+w_10240,dzm u_num
+w_10241,lac u_tfi
+w_10242,cal 04
+w_10243,u_tbuf
+w_10244,0000100
+w_10245,sza
+w_10246,jmp w_10253
+w_10247,lac u_tfi
+w_10250,cal 011
+w_10251,jda u_number
+w_10252,jmp u_advanc
+w_10253,cma
+        sub [1]
+w_10254,add u_d1
+w_10255,dzm x_lnk
+        dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10256,dac u_c1
+w_10257,lac u_tbufp
+w_10260,dac u_tal1
+w_10261,jda u_getsc
+w_10262,u_tal1
+w_10263,sza i
+w_10264,jmp w_10305
+w_10265,jda u_putsc
+w_10266,u_tal
+w_10267,dac x_ac
+        idx u_num
+        sza
+        jmp s_10267
+        lac x_ac
+        jmp w_10271
+s_10267,lac x_ac
+w_10270,sad u_o12
+w_10271,sma spa
+w_10272,jmp w_10305
+w_10273,lac u_tal
+w_10274,add u_o400000
+w_10275,and u_o17777
+w_10276,cma
+        sub [1]
+w_10277,add u_linep
+w_10300,cma
+        sub [1]
+w_10301,dac u_linsiz
+w_10302,jda u_append
+w_10303,lac u_linep
+w_10304,dac u_tal
+w_10305,idx u_c1
+        sza
+w_10306,jmp w_10261
+w_10307,jmp w_10241
+u_cw,   jda u_setfl
+w_10311,lac i u_addr1
+w_10312,sza i
+w_10313,jmp u_error
+w_10314,jda u_rname
+w_10315,lac u_o17
+w_10316,cal 06
+w_10317,u_fbuf
+w_10320,sma i
+w_10321,jmp u_error
+w_10322,dac u_tfi
+w_10323,law i 0200
+w_10324,dac u_c2
+w_10325,lac u_tbufp
+w_10326,dac u_tal1
+w_10327,dzm u_num
+w_10330,lac i u_addr1
+w_10331,jda u_gline
+w_10332,dzm x_lnk
+        dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10333,cma
+        sub [1]
+w_10334,add u_d1
+w_10335,dac u_c1
+w_10336,lac u_linep
+w_10337,dac u_tal
+w_10340,jda u_getsc
+w_10341,u_tal
+w_10342,sza i
+w_10343,jmp w_10361
+w_10344,dac x_ac
+        idx u_num
+        lac x_ac
+w_10345,jda u_putsc
+w_10346,u_tal1
+w_10347,idx u_c2
+        sza
+w_10350,jmp w_10361
+w_10351,lac u_tfi
+w_10352,cal 05
+w_10353,u_tbuf
+w_10354,0000100
+w_10355,law i 0200
+w_10356,dac u_c2
+w_10357,lac u_tbufp
+w_10360,dac u_tal1
+w_10361,idx u_c1
+        sza
+w_10362,jmp w_10340
+w_10363,lac u_addr1
+w_10364,sad u_addr2
+w_10365,jmp w_10370
+w_10366,idx u_addr1
+        sza
+w_10367,jmp w_10330
+w_10370,lac u_tal1
+w_10371,sma
+        jmp s_10371
+        cla
+        jmp w_10373
+s_10371,cla
+w_10372,jmp w_10375
+w_10373,jda u_putsc
+w_10374,u_tal1
+w_10375,law i 01
+w_10376,add u_tbufp
+w_10377,cma
+        sub [1]
+w_10400,add u_tal1
+w_10401,dac w_10405
+w_10402,lac u_tfi
+w_10403,cal 05
+w_10404,u_tbuf
+w_10405,0000000
+w_10406,lac u_tfi
+w_10407,cal 011
+w_10410,jda u_number
+w_10411,jmp u_advanc
+u_cnl,  lac u_adrflg
+w_10413,sza i
+w_10414,jmp w_10420
+w_10415,lac u_addr2
+w_10416,dac u_addr1
+w_10417,jmp u_cp1
+w_10420,lac u_dot
+w_10421,add u_d1
+w_10422,sad u_eofp
+w_10423,jmp u_error
+w_10424,dac u_dot
+w_10425,jmp u_cp1
+u_ceq,  jda u_newline
+w_10427,jda u_setfl
+w_10430,lac u_addr2
+w_10431,dac u_dot
+w_10432,cma
+        sub [1]
+w_10433,add u_zerop
+w_10434,cma
+        sub [1]
+w_10435,dac u_num
+w_10436,jda u_number
+w_10437,jmp u_advanc
+u_setdd,0000000
+        dap r_setdd
+        lac u_setdd
+w_10441,lac u_adrflg
+w_10442,sza
+w_10443,jmp r_setdd
+w_10444,lac u_dot
+w_10445,dac u_addr1
+w_10446,dac u_addr2
+w_10447,jmp r_setdd
+u_setfl,0000000
+        dap r_setfl
+        lac u_setfl
+w_10451,lac u_adrflg
+w_10452,sza
+w_10453,jmp r_setfl
+w_10454,lac u_zerop
+w_10455,add u_d1
+w_10456,dac u_addr1
+w_10457,law i 01
+w_10460,add u_eofp
+w_10461,dac u_addr2
+w_10462,jmp r_setfl
+u_newline,0000000
+        dap r_newline
+        lac u_newline
+w_10464,jda u_getsc
+w_10465,u_tal
+w_10466,sad u_o12
+w_10467,jmp r_newline
+w_10470,jmp u_error
+u_addres,0000000
+        dap r_addres
+        lac u_addres
+w_10472,dzm u_minflg
+w_10473,law i 01
+w_10474,dac u_addr
+u_ad1,  jda u_getsc
+w_10476,u_tal
+u_ad2,  jda u_betwen
+w_10500,u_d47
+w_10501,u_d58
+w_10502,sma spa
+w_10503,jmp u_numb
+w_10504,sad u_o40
+w_10505,jmp u_ad1
+w_10506,sad u_o11
+w_10507,jmp u_ad1
+w_10510,sad u_o55
+w_10511,jmp u_amin
+w_10512,sad u_o56
+w_10513,jmp u_adot
+w_10514,sad u_o53
+w_10515,jmp u_ad1
+w_10516,sad u_o44
+w_10517,jmp u_adol
+w_10520,sad u_o57
+w_10521,jmp u_fsrch
+w_10522,sad u_o77
+w_10523,jmp u_bsrch
+w_10524,dac u_char
+w_10525,lac u_minflg
+w_10526,sza
+w_10527,jmp u_error
+w_10530,lac u_addr
+w_10531,sma
+w_10532,idx r_addres
+w_10533,jmp r_addres
+u_adot, lac u_minflg
+w_10535,sza
+w_10536,jmp u_error
+w_10537,lac u_addr
+w_10540,sma
+w_10541,jmp u_error
+w_10542,lac u_dot
+w_10543,dac u_addr
+w_10544,jmp u_ad1
+u_adol, lac u_minflg
+w_10546,sza
+w_10547,jmp u_error
+w_10550,lac u_addr
+w_10551,sma
+w_10552,jmp u_error
+w_10553,law i 01
+w_10554,add u_eofp
+w_10555,dac u_addr
+w_10556,jmp u_ad1
+u_amin, law i 01
+w_10560,dac u_minflg
+w_10561,jmp u_ad1
+u_numb, dac u_char
+w_10563,sad u_d48
+w_10564,jmp w_10567
+w_10565,lac u_d10
+w_10566,jmp w_10570
+w_10567,lac u_d8
+w_10570,dac w_10575
+w_10571,dzm u_num
+w_10572,lac u_num
+w_10573,dzm x_lnk
+w_10574,mul w_10575
+        scr 1s
+        jmp w_10576
+w_10575,0000000
+w_10576,lai
+w_10577,add u_char
+w_10600,add u_dm48
+w_10601,dac u_num
+w_10602,jda u_getsc
+w_10603,u_tal
+w_10604,dac u_char
+w_10605,jda u_betwen
+w_10606,u_d47
+w_10607,u_d58
+w_10610,sma spa
+w_10611,jmp w_10572
+w_10612,lac u_minflg
+w_10613,sza i
+w_10614,jmp w_10622
+w_10615,law i 01
+w_10616,add u_num
+w_10617,cma
+        sub [1]
+w_10620,dac u_num
+w_10621,dzm u_minflg
+w_10622,lac u_addr
+w_10623,sma i
+w_10624,lac u_zerop
+w_10625,add u_num
+w_10626,dac u_addr
+w_10627,jda u_betwen
+w_10630,u_zermp
+w_10631,u_eofp
+w_10632,jmp u_error
+w_10633,lac u_char
+w_10634,jmp u_ad2
+u_number,0000000
+        dap r_number
+        lac u_number
+w_10636,lac u_d100000
+w_10637,dac u_n1
+w_10640,law u_fbuf+03
+w_10641,dac 010
+u_n0,   lac u_num
+w_10643,dzm x_lnk
+w_10644,lia
+        cla
+        scl 1s
+        div u_n1
+        jmp .+2
+        swp
+        jmp w_10646
+u_n1,   0000000
+w_10646,dac u_num
+w_10647,lai
+w_10650,add u_d48
+w_10651,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10652,lac u_n1
+w_10653,dzm x_lnk
+w_10654,lia
+        cla
+        scl 1s
+        div w_10655
+        jmp .+2
+        swp
+        jmp w_10656
+w_10655,0000012
+w_10656,lai
+w_10657,dac u_n1
+w_10660,sza
+w_10661,jmp u_n0
+w_10662,lac u_o12
+w_10663,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10664,law u_fbuf+03
+w_10665,dac 010
+w_10666,dac 011
+w_10667,law i 05
+w_10670,dac u_n1
+u_n2,   idx 010
+        lac i 010
+w_10672,sad u_d48
+w_10673,sma spa
+w_10674,jmp u_n3
+w_10675,idx 011
+        dzm i 011
+w_10676,idx u_n1
+        sza
+w_10677,jmp u_n2
+u_n3,   lac u_d1
+w_10701,cal 05
+w_10702,u_tbuf
+w_10703,0000007
+w_10704,jmp r_number
+u_rname,0000000
+        dap r_rname
+        lac u_rname
+w_10706,lac u_fbufp
+w_10707,dac u_tal1
+w_10710,law i 010
+w_10711,dac u_c1
+w_10712,jda u_getsc
+w_10713,u_tal
+w_10714,sad u_o40
+w_10715,jmp w_10712
+w_10716,sad u_o12
+w_10717,jmp w_10725
+w_10720,jda u_putsc
+w_10721,u_tal1
+w_10722,dac x_ac
+        idx u_c1
+        sza
+        jmp s_10722
+        lac x_ac
+        jmp w_10724
+s_10722,lac x_ac
+w_10723,jmp w_10712
+w_10724,jmp r_rname
+w_10725,lac u_tal1
+w_10726,sad u_fbufp
+w_10727,sma spa
+w_10730,jmp w_10735
+w_10731,lac u_fbuf
+w_10732,sza i
+w_10733,jmp u_error
+w_10734,jmp r_rname
+w_10735,lac u_o40
+w_10736,jda u_putsc
+w_10737,u_tal1
+w_10740,dac x_ac
+        idx u_c1
+        sza
+        jmp s_10740
+        lac x_ac
+        jmp w_10742
+s_10740,lac x_ac
+w_10741,jmp w_10735
+w_10742,jmp r_rname
+u_gline,0000000
+        dap r_gline
+        lac u_gline
+w_10744,dac u_glint1
+w_10745,jda u_getdsk
+w_10746,lac u_glint1
+w_10747,and u_o1777
+w_10750,add u_dskbfp
+w_10751,dac u_ital
+w_10752,lac u_linep
+w_10753,dac u_otal
+w_10754,lac u_ital
+w_10755,sad u_edskbfp
+w_10756,sma spa
+w_10757,jmp w_10765
+w_10760,lac u_diskin
+w_10761,add u_d1024
+w_10762,jda u_getdsk
+w_10763,lac u_dskbfp
+w_10764,dac u_ital
+w_10765,jda u_getsc
+w_10766,u_ital
+w_10767,jda u_putsc
+w_10770,u_otal
+w_10771,sad u_o12
+w_10772,sma spa
+w_10773,jmp w_10754
+w_10774,lac u_otal
+w_10775,sma
+w_10776,jmp w_11002
+w_10777,cla
+w_11000,jda u_putsc
+w_11001,u_otal
+w_11002,lac u_linpm1
+w_11003,cma
+        sub [1]
+w_11004,add u_otal
+w_11005,jmp r_gline
+u_rline,0000000
+        dap r_rline
+        lac u_rline
+w_11007,lac u_linep
+w_11010,dac u_tal
+w_11011,cla
+w_11012,cal 04
+w_11013,u_char
+w_11014,0000001
+w_11015,lac u_char
+w_11016,dac x_lnk
+        scr 9s
+w_11017,jda u_esc
+w_11020,lac u_char
+w_11021,and u_o777
+w_11022,jda u_esc
+w_11023,jmp w_11011
+u_esc,  0000000
+        dap r_esc
+        lac u_esc
+w_11025,sza i
+w_11026,jmp r_esc
+w_11027,jda u_putsc
+w_11030,u_tal
+w_11031,sad u_o12
+w_11032,jmp w_11052
+w_11033,sad u_o100
+w_11034,jmp w_11047
+w_11035,sad u_o43
+w_11036,sma spa
+w_11037,jmp r_esc
+w_11040,law i 01
+w_11041,add u_tal
+w_11042,dac u_tal
+w_11043,and u_o17777
+w_11044,sad u_linpm1
+w_11045,jmp w_11047
+w_11046,jmp r_esc
+w_11047,lac u_linep
+w_11050,dac u_tal
+w_11051,jmp r_esc
+w_11052,lac u_tal
+w_11053,sma
+        jmp s_11053
+        cla
+        jmp w_11055
+s_11053,cla
+w_11054,jmp w_11057
+w_11055,jda u_putsc
+w_11056,u_tal
+w_11057,law i 01
+w_11060,add u_linep
+w_11061,cma
+        sub [1]
+w_11062,add u_tal
+w_11063,dac u_linsiz
+w_11064,jmp r_rline
+u_getsc,0000000
+        dap r_getsc
+        lac u_getsc
+w_11066,lac i r_getsc
+w_11067,dac u_sctalp
+w_11070,idx r_getsc
+w_11071,lac i u_sctalp
+w_11072,dac u_sctal
+w_11073,add u_o400000
+w_11074,dac i u_sctalp
+w_11075,dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_11076,lac i u_sctal
+w_11077,dio x_io
+        lio x_lnk
+        spi
+        jmp s_11077
+        lio x_io
+        jmp w_11101
+s_11077,lio x_io
+w_11100,dac x_lnk
+        scr 9s
+w_11101,and u_o777
+w_11102,jmp r_getsc
+u_putsc,0000000
+        dap r_putsc
+        lac u_putsc
+w_11104,and u_o777
+w_11105,lia
+w_11106,lac i r_putsc
+w_11107,dac u_sctalp
+w_11110,idx r_putsc
+w_11111,lac i u_sctalp
+w_11112,dac u_sctal
+w_11113,add u_o400000
+w_11114,dac i u_sctalp
+w_11115,sma
+        jmp s_11115
+        cla
+        jmp w_11117
+s_11115,cla
+w_11116,jmp w_11123
+w_11117,dac x_lnk
+        rcl 9s
+        rcl 9s
+        rcl 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+        swp
+        cla
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0777777]
+        ior x_t
+        swp
+w_11120,dac i u_sctal
+w_11121,dac x_lnk
+        scr 9s
+w_11122,jmp r_putsc
+w_11123,lac i u_sctal
+w_11124,and u_o777000
+w_11125,dac x_t
+        lai
+        ior x_t
+w_11126,dac i u_sctal
+w_11127,lai
+w_11130,jmp r_putsc
+u_append,0000000
+        dap r_append
+        lac u_append
+w_11132,law i 01
+w_11133,add u_eofp
+w_11134,dac 010
+w_11135,cma
+        sub [1]
+w_11136,add u_dot
+w_11137,dac u_apt1
+w_11140,idx 010
+        lac i 010
+w_11141,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_11142,law i 03
+w_11143,add 010
+w_11144,dac 010
+w_11145,idx u_apt1
+        sza
+w_11146,jmp w_11140
+w_11147,idx u_eofp
+        sza
+w_11150,dzm i u_eofp
+w_11151,idx u_dot
+        sza
+w_11152,jda u_addline
+w_11153,jmp r_append
+u_addline,0000000
+        dap r_addline
+        lac u_addline
+w_11155,lac u_dskadr
+w_11156,dac i u_dot
+w_11157,jda u_getdsk
+w_11160,law i 01
+w_11161,add u_linsiz
+w_11162,cma
+        sub [1]
+w_11163,dac u_apt1
+w_11164,law u_tbuf+077
+w_11165,dac 010
+w_11166,lac u_dskadr
+w_11167,and u_o1777
+w_11170,add u_dskbfp
+w_11171,dac u_otal
+w_11172,lac u_dskadr
+w_11173,add u_linsiz
+w_11174,dac u_dskadr
+w_11175,lac u_otal
+w_11176,sad u_edskbfp
+w_11177,sma spa
+w_11200,jmp w_11206
+w_11201,lac u_diskin
+w_11202,add u_d1024
+w_11203,jda u_getdsk
+w_11204,lac u_dskbfp
+w_11205,dac u_otal
+w_11206,idx 010
+        lac i 010
+w_11207,dac i u_otal
+w_11210,idx u_otal
+        sza
+w_11211,dzm u_wrflg
+w_11212,idx u_apt1
+        sza
+w_11213,jmp w_11175
+w_11214,jmp r_addline
+u_getdsk,0000000
+        dap r_getdsk
+        lac u_getdsk
+w_11216,and u_o776000
+w_11217,sad u_diskin
+w_11220,jmp r_getdsk
+w_11221,dac w_11245
+w_11222,lac u_wrflg
+w_11223,sza
+w_11224,jmp w_11241
+w_11225,lac u_diskin
+w_11226,dac w_11231
+w_11227,lac u_sfo
+w_11230,cal 07
+w_11231,0000000
+w_11232,0000000
+w_11233,lac u_sfo
+w_11234,cal 05
+w_11235,u_dskbuf
+w_11236,0002000
+w_11237,lac u_d1
+w_11240,dac u_wrflg
+w_11241,lac w_11245
+w_11242,dac u_diskin
+w_11243,lac u_sfi
+w_11244,cal 07
+w_11245,0000000
+w_11246,0000000
+w_11247,sma i
+w_11250,jmp r_getdsk
+w_11251,lac u_sfi
+w_11252,cal 04
+w_11253,u_dskbuf
+w_11254,0002000
+w_11255,jmp r_getdsk
+u_betwen,0000000
+        dap r_betwen
+        lac u_betwen
+w_11257,dac u_bett1
+w_11260,lac i r_betwen
+w_11261,dac u_bett2
+w_11262,idx r_betwen
+w_11263,lac i u_bett2
+w_11264,cma
+        sub [1]
+w_11265,add u_bett1
+w_11266,sma i
+w_11267,jmp w_11300
+w_11270,lac i r_betwen
+w_11271,dac u_bett2
+w_11272,idx r_betwen
+w_11273,law i 01
+w_11274,add i u_bett2
+w_11275,cma
+        sub [1]
+w_11276,add u_bett1
+w_11277,sma i
+w_11300,idx r_betwen
+w_11301,lac u_bett1
+w_11302,jmp r_betwen
+u_error,lac u_d1
+w_11304,cal 05
+w_11305,w_11310
+w_11306,0000001
+w_11307,jmp u_advanc
+w_11310,0077012
+u_cs,   jda u_getsc
+w_11312,u_tal
+w_11313,sad u_o40
+w_11314,jmp u_cs
+w_11315,sad u_o12
+w_11316,jmp u_error
+w_11317,dac u_delim
+w_11320,jda u_compile
+w_11321,lac u_tbufp
+w_11322,dac u_tal1
+w_11323,jda u_getsc
+w_11324,u_tal
+w_11325,sad u_delim
+w_11326,jmp w_11334
+w_11327,sad u_o12
+w_11330,jmp u_error
+w_11331,jda u_putsc
+w_11332,u_tal1
+w_11333,jmp w_11323
+w_11334,lac u_o12
+w_11335,jda u_putsc
+w_11336,u_tal1
+w_11337,jda u_newline
+w_11340,jda u_setdd
+w_11341,lac u_addr1
+w_11342,sad u_zerop
+w_11343,jmp u_error
+w_11344,dac u_addr1
+w_11345,lac i u_addr1
+w_11346,jda u_execute
+w_11347,jmp w_11426
+w_11350,lac u_addr1
+w_11351,dac u_dot
+w_11352,law u_tbuf+077
+w_11353,dac 010
+w_11354,law u_line+077
+w_11355,dac 011
+w_11356,law i 0100
+w_11357,dac u_c1
+w_11360,idx 010
+        lac i 010
+w_11361,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_11362,idx u_c1
+        sza
+w_11363,jmp w_11360
+w_11364,law i 01
+w_11365,add u_fchrno
+w_11366,dac u_linsiz
+w_11367,dzm x_lnk
+        dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11370,dio x_io
+        lio x_lnk
+        spi
+        jmp s_11370
+        lio x_io
+        jmp w_11372
+s_11370,lio x_io
+w_11371,xor u_o400000
+w_11372,add u_linep
+w_11373,dac u_tal1
+w_11374,lac u_tbufp
+w_11375,dac u_tal
+w_11376,jda u_getsc
+w_11377,u_tal
+w_11400,sad u_o12
+w_11401,jmp w_11406
+w_11402,jda u_putsc
+w_11403,u_tal1
+w_11404,idx u_linsiz
+        sza
+w_11405,jmp w_11376
+w_11406,law i 01
+w_11407,add u_lchrno
+w_11410,dzm x_lnk
+        dio x_io
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        lio x_io
+w_11411,dio x_io
+        lio x_lnk
+        spi
+        jmp s_11411
+        lio x_io
+        jmp w_11413
+s_11411,lio x_io
+w_11412,xor u_o400000
+w_11413,add u_nlistp
+w_11414,dac u_tal
+w_11415,jda u_getsc
+w_11416,u_tal
+w_11417,jda u_putsc
+w_11420,u_tal1
+w_11421,dac x_ac
+        idx u_linsiz
+        sza
+        jmp s_11421
+        lac x_ac
+        jmp w_11423
+s_11421,lac x_ac
+w_11422,sad u_o12
+w_11423,sma spa
+w_11424,jmp w_11415
+w_11425,jda u_addline
+w_11426,lac u_addr1
+w_11427,sad u_addr2
+w_11430,jmp u_advanc
+w_11431,add u_d1
+w_11432,jmp w_11344
+u_fsrch,dac u_delim
+w_11434,jda u_compile
+w_11435,jda u_srcsav
+w_11436,lac u_dot
+u_floop,add u_d1
+w_11440,dac u_addr
+w_11441,lac i u_addr
+w_11442,sza
+w_11443,jmp w_11447
+w_11444,lac u_zerop
+w_11445,dac u_addr
+w_11446,jmp w_11453
+w_11447,jda u_execute
+w_11450,jmp w_11453
+w_11451,jda u_srcres
+w_11452,jmp u_ad1
+w_11453,lac u_addr
+w_11454,sad u_dot
+w_11455,jmp u_error
+w_11456,jmp u_floop
+u_bsrch,dac u_delim
+w_11460,jda u_compile
+w_11461,jda u_srcsav
+w_11462,lac u_dot
+w_11463,sad u_zerop
+w_11464,lac u_eofp
+u_bloop,add u_dm1
+w_11466,dac u_addr
+w_11467,lac i u_addr
+w_11470,sza
+w_11471,jmp w_11475
+w_11472,lac u_eofp
+w_11473,dac u_addr
+w_11474,jmp w_11501
+w_11475,jda u_execute
+w_11476,jmp w_11501
+w_11477,jda u_srcres
+w_11500,jmp u_ad1
+w_11501,lac u_addr
+w_11502,sad u_dot
+w_11503,jmp u_error
+w_11504,jmp u_bloop
+u_srcsav,0000000
+        dap r_srcsav
+        lac u_srcsav
+w_11506,lac u_minflg
+w_11507,sza
+w_11510,jmp u_error
+w_11511,lac u_addr
+w_11512,sma
+w_11513,jmp u_error
+w_11514,law u_tbuf+077
+w_11515,dac 010
+w_11516,law u_fbuf+03
+w_11517,dac 011
+w_11520,law i 0100
+w_11521,dac u_c1
+w_11522,idx 010
+        lac i 010
+w_11523,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_11524,idx u_c1
+        sza
+w_11525,jmp w_11522
+w_11526,jmp r_srcsav
+u_srcres,0000000
+        dap r_srcres
+        lac u_srcres
+w_11530,law u_fbuf+03
+w_11531,dac 010
+w_11532,law u_tbuf+077
+w_11533,dac 011
+w_11534,law i 0100
+w_11535,dac u_c1
+w_11536,idx 010
+        lac i 010
+w_11537,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_11540,idx u_c1
+        sza
+w_11541,jmp w_11536
+w_11542,jmp r_srcres
+// By hand, ed2.s:180-407, the regular expressions, in PDP-1 code.
+// 1970's compile wrote PDP-7 code into compbuf (a link word, a jms to matchar, the
+// character), and execute ran it a character at a time, each list of live matches a
+// chain of pairs, a jms to a group and a start word, ending in a jump to xchg
+// (Thompson's method).
+// The method is kept, with PDP-1 words.
+// A group is "jda h_mch; c" for a character, "jda h_mbol" for ^, "jda h_meol" for $
+// and "jda h_fnd" at the end, and a list entry is "jsp group; start".
+// So a group is entered with AC = the address of its entry's start word, which jda
+// keeps in the routine's first word.
+// Every address is taken from those words with dap only, since jda's and jsp's AC
+// carry the bank's bits.
+// The character is kept in h_ch, where 1970 kept it in MQ.
+// clsure and matclo, for *, are left out, since 1970's compile never reaches them
+// (ed2.s:202-203).
+// compile --compile the pattern up to the delimiter in delim into compbuf, or keep
+// the last pattern's groups when this one is empty.
+// A new line in the pattern, or an empty pattern with no last one, goes to error.
+// AC and IO are not preserved.
+// Called via jda.
+u_compile,0000000
+        dap r_compile
+        law u_compbuf
+        dac h_cp
+        dzm u_compflg
+u_cadvanc,jda u_getsc
+        u_tal
+        sad u_delim
+        jmp u_cdone
+        dac u_compflg
+        dzm u_lastre
+        sad u_o12
+        jmp u_error
+        sad u_o136
+        jmp u_beglin
+        sad u_o44
+        jmp u_endlin
+        dac h_c                         // a character's group (ed2.s:204-206)
+        lac h_jmch
+        dac i h_cp
+        idx h_cp
+        lac h_c
+        dac i h_cp
+        idx h_cp
+        jmp u_cadvanc
+u_cdone,lac u_compflg
+        sza i
+        jmp h_cd1
+        dac u_lastre
+        lac h_jfnd                      // the found group (ed2.s:214-215)
+        dac i h_cp
+        jmp r_compile
+h_cd1,  lac u_lastre
+        sza i
+        jmp u_error
+        jmp r_compile
+u_beglin,lac h_jbol                     // ^'s group (ed2.s:227-228)
+        dac i h_cp
+        idx h_cp
+        jmp u_cadvanc
+u_endlin,lac h_jeol                     // $'s group (ed2.s:233-234)
+        dac i h_cp
+        idx h_cp
+        jmp u_cadvanc
+
+// execute -- run the compiled pattern over a line.
+// Entry: AC = the line's node.
+// Exit: a skip return when it matched, with the number of the match's first character
+// in fchrno and the number of the character after it in lchrno, both from 1.
+// AC and IO are not preserved.
+// Called via jda.
+u_execute,0000000
+        dap r_execute
+        lac u_execute
+        jda u_gline
+        lac u_linep
+        dac u_tal1
+        dzm u_charno
+        dzm u_fchrno
+        dzm u_lchrno
+        law u_nlist                     // nlist runs first, empty,
+        dac h_run                       // and clist is built (ed2.s:271-276)
+        law u_clist
+        dac h_nb
+        lac h_jxc
+        dac i h_run
+h_ex1,  lac h_run                       // the list to run after the first group,
+        dap h_tv                        // and the one to build (ed2.s:286-293)
+        lac h_nb
+        dac h_np
+        jda u_getsc
+        u_tal1
+        dac h_ch
+        idx u_charno
+        jsp u_compbuf
+u_charno,0000000
+h_tv,   jmp .
+u_xchg, lac h_ch
+        sad u_o12
+        jmp r_execute
+        lac h_jxc                       // the new list's end (ed2.s:283-284)
+        dac i h_np
+        lac h_run                       // the lists exchanged (ed2.s:286-291)
+        lio h_nb
+        dio h_run
+        dac h_nb
+        jmp h_ex1
+
+// h_mch -- a character's group.
+// Entry: h_mch's first word = the list entry's start word; AC = the group's character
+// word, the next group after it.
+// A match puts "jsp next; start" in the new list.
+// Returns to the list entry after the start word.
+// AC is not preserved, IO is preserved.
+// Called via jda from compbuf.
+h_mch,  0
+        dap h_arg
+        lac h_mch                       // exret, the start word (ed2.s:304-308)
+        dap h_exr
+        lac h_ch                        // this group's character? (ed2.s:309-312)
+        sad i h_arg
+        jmp h_mc1
+        jmp h_mcx
+h_mc1,  lac h_arg                       // "jsp next" in the new list (ed2.s:313-316)
+        add u_d1
+        ior h_jsp
+        dac i h_np
+        idx h_np
+        lac i h_exr                     // and the start word (ed2.s:319-320)
+        dac i h_np
+        idx h_np
+h_mcx,  idx h_exr                       // on along the list (ed2.s:322-323)
+        jmp i h_exr
+
+// h_fnd -- the found group.
+// Entry: h_fnd's first word = the list entry's start word.
+// Keeps the leftmost match, and of those the longest, as fchrno and lchrno.
+// The first one makes execute skip.
+// Returns to the list entry after the start word.
+// AC is not preserved, IO is preserved.
+// Called via jda from compbuf.
+h_fnd,  0
+        lac h_fnd                       // exret, the start word (ed2.s:326-330)
+        dap h_exr
+        lac u_fchrno
+        sza
+        jmp h_f1
+        idx r_execute
+        jmp h_f2
+h_f1,   sad i h_exr
+        jmp h_f3
+        cma                             // an earlier start is taken (start -
+        add i h_exr                     // fchrno, never 0 here; ed2.s:339-342)
+        spa
+        jmp h_f2
+        jmp h_mcx
+h_f3,   lac u_lchrno                    // from the same start, a longer match
+        cma                             // is taken (charno - lchrno, -0 when
+        add u_charno                    // equal, which spa reads as negative;
+        spa                             // ed2.s:345-349)
+        jmp h_mcx
+h_f2,   lac i h_exr
+        dac u_fchrno
+        lac u_charno
+        dac u_lchrno
+        jmp h_mcx                       // ed2.s:356-357
+
+// h_mbol -- ^'s group.
+// Entry: h_mbol's first word = the list entry's start word; AC = the next group.
+// At the line's first character the next group runs at once, with the same entry.
+// Otherwise the list goes on.
+// AC is not preserved, IO is preserved.
+// Called via jda from compbuf.
+h_mbol, 0
+        dap h_bn
+        lac u_charno
+        sad u_d1
+        jmp h_b1
+        lac h_mbol                      // on along the list (ed2.s:363, 375-379)
+        dap h_exr
+        jmp h_mcx
+h_b1,   lac h_mbol                      // the next group (ed2.s:366, 385-390)
+h_bn,   jmp .
+
+// h_meol -- $'s group, as ^'s, at the line's new line.
+// AC is not preserved, IO is preserved.
+// Called via jda from compbuf.
+h_meol, 0
+        dap h_en
+        lac h_ch
+        sad u_o12
+        jmp h_e1
+        lac h_meol                      // on along the list (ed2.s:373-379)
+        dap h_exr
+        jmp h_mcx
+h_e1,   lac h_meol                      // the next group (ed2.s:383-390)
+h_en,   jmp .
+u_d1,   0000001
+u_o133, 0000133
+u_dm3,  0777774
+u_o136, 0000136
+u_dm2,  0777775
+u_o52,  0000052
+u_o57,  0000057
+u_o77,  0000077
+u_o40,  0000040
+u_o12,  0000012
+u_d47,  0000057
+u_d58,  0000072
+u_dm48, 0777717
+u_d10,  0000012
+u_d8,   0000010
+u_d48,  0000060
+u_d100000,0303240
+u_o44,  0000044
+u_o53,  0000053
+u_o56,  0000056
+u_o55,  0000055
+u_o11,  0000011
+u_o400000,0400000
+u_o17777,0017777
+u_o144, 0000144
+u_dm1,  0777776
+u_o56012,0056012
+u_o777, 0000777
+u_o100, 0000100
+u_o43,  0000043
+u_o777000,0777000
+u_o75,  0000075
+u_o167, 0000167
+u_o161, 0000161
+u_o160, 0000160
+u_o143, 0000143
+u_o141, 0000141
+u_o1777,0001777
+u_d1024,0002000
+u_o776000,0776000
+u_o162, 0000162
+u_o163, 0000163
+u_o73,  0000073
+u_o54,  0000054
+u_o17,  0000017
+u_tname,0145056
+w_12127,0164155
+w_12130,0160040
+w_12131,0040040
+u_tbufp,u_tbuf
+u_linep,u_line
+u_nlistp,u_nlist
+u_fbufp,u_fbuf
+u_dskbfp,u_dskbuf
+u_edskbfp,u_lnodes
+u_lnodp,u_lnodes
+u_linpm1,u_tbuf+077
+u_jmpclist,jmp u_clist
+u_jmpnlist,jmp u_nlist
+u_jmpxchg,jmp u_xchg
+u_jms1, jda 01
+u_tal,
+        .+01/
+u_exret,
+        .+01/
+u_cloret,
+        .+01/
+u_delim,
+        .+01/
+u_prev,
+        .+01/
+u_compflg,
+        .+01/
+u_tal1,
+        .+01/
+u_c1,
+        .+01/
+u_ital,
+        .+01/
+u_otal,
+        .+01/
+u_diskin,
+        .+01/
+u_glint1,
+        .+01/
+u_c2,
+        .+01/
+u_num,
+        .+01/
+u_zermp,
+        .+01/
+u_minflg,
+        .+01/
+u_adrflg,
+        .+01/
+u_dot,
+        .+01/
+u_addr,
+        .+01/
+u_addr1,
+        .+01/
+u_addr2,
+        .+01/
+u_eofp,
+        .+01/
+u_zerop,
+        .+01/
+u_dskadr,
+        .+01/
+u_linsiz,
+        .+01/
+u_tfi,
+        .+01/
+u_fchrno,
+        .+01/
+u_lchrno,
+        .+01/
+u_lastre,
+        .+01/
+u_bett1,
+        .+01/
+u_bett2,
+        .+01/
+u_wrflg,
+        .+01/
+u_apt1,
+        .+01/
+u_sfi,
+        .+01/
+u_sfo,
+        .+01/
+u_sctal,
+        .+01/
+u_sctalp,
+        .+01/
+u_char,
+        .+01/
+u_fbuf,
+        .+04/
+u_tbuf,
+        .+0100/
+u_line,
+        .+0100/
+u_nlist,
+        .+062/
+u_clist,
+        .+062/
+u_compbuf,
+        .+0144/
+u_dskbuf,
+        .+02000/
+u_lnodes,
+        .+01750/
+x_end,
+0110/
+r_setdd,jmp 0
+r_setfl,jmp 0
+r_newline,jmp 0
+r_addres,jmp 0
+r_number,jmp 0
+r_rname,jmp 0
+r_gline,jmp 0
+r_rline,jmp 0
+r_esc,  jmp 0
+r_getsc,jmp 0
+r_putsc,jmp 0
+r_append,jmp 0
+r_addline,jmp 0
+r_getdsk,jmp 0
+r_betwen,jmp 0
+r_srcsav,jmp 0
+r_srcres,jmp 0
+r_compile,jmp 0
+r_comp, jmp 0
+r_execute,jmp 0
+r_matchar,jmp 0
+r_found,jmp 0
+r_matbol,jmp 0
+r_mateol,jmp 0
+r_matclo,jmp 0
+        constants
+start 020000

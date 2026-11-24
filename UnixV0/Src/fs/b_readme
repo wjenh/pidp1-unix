@@ -1,0 +1,22 @@
+Here is how to compile and run hello.b in the dmr directory.
+Log in as dmr/dmr.
+Lines starting with @ are the Unix prompt, type what is given.
+Lines with no leading @ are output you should see.
+The assembly step takes a while, it assembles the entore B runtime.
+
+If this is the first B program you are compiling:
+@ ln system bop.s
+@ ln system brt.s
+
+Then:
+
+@ b hello.b hello.s
+@ as bop.s brt.s hello.s
+I
+II
+bop.s   
+brt.s    
+hello.s 
+@ a.out
+Hello, World!
+

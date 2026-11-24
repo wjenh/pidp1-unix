@@ -1,0 +1,330 @@
+date
+// Translated by as7am1 from the PDP-7 source other/wktdate.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// By hand, the words of the divide by 216000 below.
+h_d54k, 0151360                         // 54000
+h_d3,   3
+h_tabp, h_tab
+h_tab,  0; 0151360; 0322740; 0474320    // 0, 1, 2 and 3 times 54000
+h_a,    0                               // the time / 54000
+h_r,    0                               // its remainder
+h_p,    0
+0100/
+        SYSFRAME()
+0113/
+w_10000,cal 017
+w_10001,dzm x_lnk
+// By hand, 216000 is past 0377777, and the PDP-1's div takes its divisor signed, where
+// the PDP-7's EAE took it unsigned.
+// So the time is divided by 54000, then by 4, and the remainder made up again as
+// (a mod 4) x 54000 + r, under 216000.
+// A year's time divided by 54000 cannot overflow (its high part, doubled, is under 15000).
+w_10002,scl 1s
+        div h_d54k
+        jmp .+1                         // an overflow, which cannot happen
+        dio h_r
+        dac h_a
+        and h_d3
+        add h_tabp
+        dac h_p
+        lac h_a
+        sar 2s
+        lia                             // the hours, in IO
+        lac i h_p
+        add h_r                         // the sixtieths past the hour, in AC
+        jmp w_10004
+w_10003,0645700
+w_10004,dac u_sixtieth
+w_10005,lai
+w_10006,lia
+        cla
+        scl 1s
+        div w_10007
+        jmp .+2
+        swp
+        jmp w_10010
+w_10007,0000030
+w_10010,dac u_hours
+w_10011,lai
+w_10012,dac u_dayinyea
+w_10013,lia
+w_10014,add i u_daysinmo
+w_10015,sma sza
+w_10016,jmp w_10020
+w_10017,jmp w_10023
+w_10020,dac x_ac
+        idx u_curmonth
+        sza
+        jmp s_10020
+        lac x_ac
+        jmp w_10022
+s_10020,lac x_ac
+w_10021,dac x_ac
+        idx u_daysinmo
+        sza
+        jmp s_10021
+        lac x_ac
+        jmp w_10023
+s_10021,lac x_ac
+w_10022,jmp w_10013
+w_10023,lac u_dayinyea
+w_10024,lia
+        cla
+        scl 1s
+        div w_10025
+        jmp .+2
+        swp
+        jmp w_10026
+w_10025,0000007
+w_10026,add u_dayptr
+w_10027,dac u_dayptr
+w_10030,lac i u_dayptr
+w_10031,dac w_10034
+w_10032,lac u_d1
+w_10033,cal 05
+w_10034,0000000
+w_10035,0000002
+w_10036,lac i u_curmonth
+w_10037,dac w_10042
+w_10040,lac u_d1
+w_10041,cal 05
+w_10042,0000000
+w_10043,0000002
+w_10044,lai
+w_10045,add u_d1
+w_10046,jda u_decprnt
+w_10047,0777775
+w_10050,jda u_seventy
+w_10051,lac u_hours
+w_10052,jda u_decprnt
+w_10053,0777775
+w_10054,jda u_colon
+w_10055,lac u_sixtieth
+w_10056,lia
+        cla
+        scl 1s
+        div w_10057
+        jmp .+2
+        swp
+        jmp w_10060
+w_10057,0000074
+w_10060,lai
+w_10061,lia
+        cla
+        scl 1s
+        div w_10062
+        jmp .+2
+        swp
+        jmp w_10063
+w_10062,0000074
+w_10063,dac u_seconds
+w_10064,lai
+w_10065,jda u_decprnt
+w_10066,0777775
+w_10067,jda u_colon
+w_10070,lac u_seconds
+w_10071,jda u_decprnt
+w_10072,0777775
+w_10073,lac u_d1
+w_10074,cal 05
+w_10075,u_newline
+w_10076,0000001
+w_10077,cal 016
+u_decprnt,0000000
+        dap r_decprnt
+        lac u_decprnt
+w_10101,dac u_num
+w_10102,lac u_endptr
+w_10103,dac u_dbufptr
+w_10104,dzm u_count
+w_10105,lac u_num
+w_10106,dzm x_lnk
+w_10107,sza
+w_10110,jmp w_10113
+w_10111,lac u_o60
+w_10112,jmp w_10116
+w_10113,lia
+        cla
+        scl 1s
+        div w_10114
+        jmp .+2
+        swp
+        jmp w_10115
+w_10114,0000012
+w_10115,add u_o60
+w_10116,dac i u_dbufptr
+w_10117,law i 01
+w_10120,add u_dbufptr
+w_10121,dac u_dbufptr
+w_10122,dac x_ac
+        idx u_count
+        sza
+        jmp s_10122
+        lac x_ac
+        jmp w_10124
+s_10122,lac x_ac
+w_10123,lai
+w_10124,dac x_ac
+        idx i r_decprnt
+        sza
+        jmp s_10124
+        lac x_ac
+        jmp w_10126
+s_10124,lac x_ac
+w_10125,jmp w_10106
+w_10126,dac x_ac
+        idx u_dbufptr
+        sza
+        jmp s_10126
+        lac x_ac
+        jmp w_10130
+s_10126,lac x_ac
+w_10127,lac u_d1
+w_10130,cal 05
+u_dbufptr,u_dbufend
+u_count,0000000
+w_10133,idx r_decprnt
+w_10134,jmp r_decprnt
+u_colon,0000000
+        dap r_colon
+        lac u_colon
+w_10136,lac u_d1
+w_10137,cal 05
+w_10140,u_colonstr
+w_10141,0000001
+w_10142,jmp r_colon
+u_seventy,0000000
+        dap r_seventy
+        lac u_seventy
+w_10144,lac u_d1
+w_10145,cal 05
+w_10146,u_seventys
+w_10147,0000003
+w_10150,jmp r_seventy
+u_dbuf,
+        table 04, 0
+u_dbufend,
+        table 01, 0
+u_endptr,u_dbufend
+u_d1,   0000001
+u_d10,  0000012
+u_o60,  0000060
+u_num,  0000000
+u_colonstr,0000072
+u_seventys,0040061
+w_10165,0071067
+w_10166,0060040
+u_newline,0000012
+u_sixtieth,0000000
+u_seconds,0000000
+u_minutes,0000000
+u_hours,0000000
+u_dayinyea,0000000
+u_curmonth,u_montharr
+u_montharr,u_jan
+w_10177,u_feb
+w_10200,u_mar
+w_10201,u_apr
+w_10202,u_may
+w_10203,u_jun
+w_10204,u_jul
+w_10205,u_aug
+w_10206,u_sep
+w_10207,u_oct
+w_10210,u_nov
+w_10211,u_dec
+u_jan,  0112141
+w_10213,0156040
+u_feb,  0106145
+w_10215,0142040
+u_mar,  0115141
+w_10217,0162040
+u_apr,  0101160
+w_10221,0162040
+u_may,  0115141
+w_10223,0171040
+u_jun,  0112165
+w_10225,0156040
+u_jul,  0112165
+w_10227,0154040
+u_aug,  0101165
+w_10231,0147040
+u_sep,  0123145
+w_10233,0160040
+u_oct,  0117143
+w_10235,0164040
+u_nov,  0116157
+w_10237,0166040
+u_dec,  0104145
+w_10241,0143040
+u_daysinmo,u_dayarray
+u_dayarray,0777740
+w_10244,0777742
+w_10245,0777740
+w_10246,0777741
+w_10247,0777740
+w_10250,0777741
+w_10251,0777740
+w_10252,0777740
+w_10253,0777741
+w_10254,0777740
+w_10255,0777741
+w_10256,0777740
+u_dayptr,u_daylist
+u_daylist,u_thu
+w_10261,u_fri
+w_10262,u_sat
+w_10263,u_sun
+w_10264,u_mon
+w_10265,u_tue
+w_10266,u_wed
+u_sun,  0123165
+w_10270,0156040
+u_mon,  0115157
+w_10272,0156040
+u_tue,  0124165
+w_10274,0145040
+u_wed,  0127145
+w_10276,0144040
+u_thu,  0124150
+w_10300,0165040
+u_fri,  0106162
+w_10302,0151040
+u_sat,  0123141
+w_10304,0164040
+x_end,
+0110/
+r_decprnt,jmp 0
+r_colon,jmp 0
+r_seventy,jmp 0
+        constants
+start 020000

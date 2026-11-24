@@ -1,0 +1,85 @@
+chrm
+// Translated by as7am1 from the PDP-7 source cmd/chrm.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0110/
+w_10000,lac 07777
+w_10001,add u_d5
+w_10002,dac w_10014
+w_10003,dac w_10026
+w_10004,lac i 07777
+w_10005,sad u_d4
+w_10006,cal 016
+w_10007,add u_dm4
+w_10010,dac i 07777
+w_10011,cal 021
+w_10012,u_dd
+w_10013,cal 021
+w_10014,0000000
+w_10015,lac i 07777
+w_10016,sad u_d4
+w_10017,cal 016
+w_10020,add u_dm4
+w_10021,dac i 07777
+w_10022,lac w_10026
+w_10023,add u_d4
+w_10024,dac w_10026
+w_10025,cal 013
+w_10026,0000000
+w_10027,sma
+w_10030,jmp w_10015
+w_10031,lac w_10026
+w_10032,dac w_10035
+w_10033,lac u_d1
+w_10034,cal 05
+w_10035,0000000
+w_10036,0000004
+w_10037,lac u_d1
+w_10040,cal 05
+w_10041,w_10044
+w_10042,0000002
+w_10043,jmp w_10015
+w_10044,0040077
+w_10045,0012000
+u_dd,   0144144
+w_10047,0040040
+w_10050,0040040
+w_10051,0040040
+u_d1,   0000001
+u_d4,   0000004
+u_d5,   0000005
+u_dm4,  0777773
+x_end,
+0110/
+        constants
+start 020000

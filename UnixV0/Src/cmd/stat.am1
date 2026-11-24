@@ -1,0 +1,176 @@
+stat
+// Translated by as7am1 from the PDP-7 source cmd/stat.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0114/
+w_10000,lac 07777
+w_10001,add u_d1
+w_10002,dac u_name
+u_loop, lac i 07777
+w_10004,sad u_d4
+w_10005,cal 016
+w_10006,add u_dm4
+w_10007,dac i 07777
+w_10010,lac u_name
+w_10011,add u_d4
+w_10012,dac u_name
+w_10013,law u_iflags
+w_10014,cal 031
+w_10015,u_dotdot
+u_name, 0010000
+w_10017,sma i
+w_10020,jmp u_error
+w_10021,law u_ii
+w_10022,dac 014
+w_10023,lac u_ii
+w_10024,lia
+w_10025,law i 03
+w_10026,jda u_octal
+w_10027,lac u_iflags
+w_10030,lia
+w_10031,law i 02
+w_10032,jda u_octal
+w_10033,lac u_iuid
+w_10034,lia
+w_10035,law i 02
+w_10036,jda u_octal
+w_10037,law i 01
+w_10040,add u_inlks
+w_10041,cma
+        sub [1]
+w_10042,lia
+w_10043,law i 02
+w_10044,jda u_octal
+w_10045,lac u_isize
+w_10046,lia
+w_10047,law i 05
+w_10050,jda u_octal
+w_10051,lac u_o12
+w_10052,dac u_obuf+022
+w_10053,lac u_d1
+w_10054,cal 05
+w_10055,u_obuf
+w_10056,0000023
+w_10057,jmp u_loop
+u_error,lac u_name
+w_10061,dac w_10064
+w_10062,lac u_d1
+w_10063,cal 05
+w_10064,0010000
+w_10065,0000004
+w_10066,lac u_d1
+w_10067,cal 05
+w_10070,w_10073
+w_10071,0000002
+w_10072,jmp u_loop
+w_10073,0040077
+w_10074,0000012
+u_octal,0000000
+        dap r_octal
+        lac u_octal
+w_10076,dac u_c
+w_10077,law u_obuf+022
+w_10100,dac 010
+w_10101,lac u_o40
+w_10102,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10103,lai
+w_10104,and u_o7
+w_10105,add u_o60
+w_10106,dac x_ac
+        idx 010
+        lac x_ac
+        dac i 010
+w_10107,scr 3s
+        and [0077777]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0700000]
+        ior x_t
+w_10110,idx u_c
+        sza
+w_10111,jmp w_10103
+w_10112,lac 010
+w_10113,dac u_c
+w_10114,lac i u_c
+w_10115,dac x_ac
+        idx 014
+        lac x_ac
+        dac i 014
+w_10116,sad u_o40
+w_10117,jmp r_octal
+w_10120,law i 01
+w_10121,add u_c
+w_10122,dac u_c
+w_10123,jmp w_10114
+u_dotdot,0056056
+w_10125,0040040
+w_10126,0040040
+w_10127,0040040
+u_d1,   0000001
+u_d2,   0000002
+u_d3,   0000003
+u_d8,   0000010
+u_d14,  0000016
+u_d12,  0000014
+u_o12,  0000012
+u_o60,  0000060
+u_o40,  0000040
+u_o7,   0000007
+u_d4,   0000004
+u_dm4,  0777773
+u_c,
+        .+01/
+u_iflags,
+        .+010/
+u_iuid,
+        .+01/
+u_inlks,
+        .+01/
+u_isize,
+        .+02/
+u_ii,
+        .+01/
+u_obuf,
+        .+023/
+u_tbuf,
+        .+012/
+x_end,
+0110/
+r_octal,jmp 0
+        constants
+start 020000

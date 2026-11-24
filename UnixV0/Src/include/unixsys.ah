@@ -1,0 +1,64 @@
+// The Unix system calls for a program, the call numbers for cal N, and the
+// system call frame every program's image carries at its bank's 0100-0107.
+// Definitions only.
+// SYSFRAME() emits the frame's eight words where it is used, as in
+//     100/
+//     SYSFRAME()
+//
+// 23-Nov-2026, Claude: comments cleaned for the release.
+
+#ifndef UNIXSYS_AH
+#define UNIXSYS_AH
+
+// The kernel's entry, at a fixed place in bank 0 so that a program's image
+// does not change with the kernel.
+// 0:0101 holds jmp sysent.
+#define SYSENTRY    0101
+
+// The call numbers, 1970's (s1.s:137-142).
+#define SYSSAVE     01
+#define SYSGETUID   02
+#define SYSOPEN     03
+#define SYSREAD     04
+#define SYSWRITE    05
+#define SYSCREAT    06
+#define SYSSEEK     07
+#define SYSTELL     010
+#define SYSCLOSE    011
+#define SYSLINK     012
+#define SYSUNLINK   013
+#define SYSSETUID   014
+#define SYSRENAME   015
+#define SYSEXIT     016
+#define SYSTIME     017
+#define SYSINTRP    020
+#define SYSCHDIR    021
+#define SYSCHMOD    022
+#define SYSCHOWN    023
+#define SYSRBLK     024             // not in 1970, a drum block read
+#define SYSSYSLOC   025
+#define SYSWBLK     026             // not in 1970, a drum block written, super-user only
+#define SYSCAPT     027
+#define SYSRELE     030
+#define SYSSTATUS   031
+#define SYSSMES     033
+#define SYSRMES     034
+#define SYSFORK     035
+
+// The frame.
+// cal stores AC at 0100 and runs 0101, which opens the window and jumps
+// into the kernel.
+// The kernel returns to 0104 with the window open, having written the
+// return address into 0106.
+#define SYSFRAME()
+        0                   // 0100, the caller's AC, stored by cal
+        eem                 // 0101
+        jmp i 0103          // 0102, into bank 0
+        SYSENTRY            // 0103
+        lem                 // 0104, where the kernel returns, window open
+        jmp i 0106          // 0105
+        0                   // 0106, the return address, 12 bits
+        0                   // 0107, spare
+#enddef
+
+#endif

@@ -1,0 +1,328 @@
+as1
+// as1 makes the PDP-1 program from what as left in the current directory.
+// That is a.out (PDP-7 words), a.rel and n.out.
+// a.rel holds a record for each word, with its relocation, first name,
+// base, span, file and line.
+// as1 translates by as7am1's rules into as7am1's layout, writes the PDP-1
+// program over a.out and its addresses over n.out, and removes a.rel.
+// What as7am1 reports for a hand fix is an error at its file and line, and
+// then nothing is written.
+// A number from 4096 to 8191 in a data word only warns.
+//
+// as1c.ac stays in core.
+// Ten overlays take turns at OV, carrying what they find in the flags
+// table and the as1t file.
+// This one, the first, is in the as1 file, and finds each name's class.
+// The others are in the as1x file; as1c.ac says which.
+//
+// 22-Nov-2026, Claude: written.
+// 23-Nov-2026, Claude: a.rel's ".." checked.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+#define NOPS    0104            // the op table's entries
+
+OV/
+// The common start runs this with the files open.
+// a.rel's head word 2, as's final "..", is checked first.
+// It is 4096 for PDP-7 code, and 0 after bop.s's "..=0", in a B program that
+// is already the PDP-1's.
+// as1 refuses any value but 4096.
+// Then the names' classes are found, and the words' overlay is run.
+        lac [2]
+        lio [FAREL]
+        jda cget
+        sas [010000]                // skip if PDP-7 code
+        jmp ov1
+        jda ncls
+        lac [OVK]
+        jmp ovload
+ov1,
+        lac [m_p7]
+        jmp fatal
+
+m_p7,   0141056; 0157165; 0164040; 0151163; 0040156; 0157164 // "a.out is not PDP-7 code"
+        0040120; 0104120; 0055067; 0040143; 0157144; 0145000
+
+// Finds each name's class, three bits, six to a word of NCLS.
+// An opcode name with its own value has its opcode's class, an absolute
+// 70xxxx is an IOT (6), and a relocatable name whose value is a jms is 7, a
+// call by another name (fop.s's fld).
+// The rules are translate.c's instClass.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+ncls,   0
+        dap nclsx
+        dzm nce
+        lac [NCLS]
+        dac ncp
+        dzm ncw
+        law i 6
+        dac ncf
+nc1,
+        lac nce
+        add [6]
+        sub nnout
+        sma sza                     // skip unless another entry fits
+        jmp nc9
+
+        // The entry's words.
+        law nn0
+        dac ncq
+        lac nce
+        dac ncr
+        law i 6
+        dac ncn
+nc2,
+        lac ncr
+        lio [FNOUT]
+        jda cget
+        dac i ncq
+        idx ncq
+        idx ncr
+        isp ncn
+        jmp nc2
+
+        // An opcode's name has its class only with its own value.
+        dzm ncc
+        lac nn3
+        sas [040040]                // skip if the name has six letters at most
+        jmp nc6
+        law optab
+        dac ocp
+        dzm oci
+        law i NOPS
+        dac ocn
+nc3,
+        lac ocp
+        dac ocq
+        idx ocq
+        lac i ocq
+        sas nn0
+        jmp nc4
+        idx ocq
+        lac i ocq
+        sas nn1
+        jmp nc4
+        idx ocq
+        lac i ocq
+        sas nn2
+        jmp nc4
+        lac ntype
+        sza
+        jmp nc8
+        lac i ocp
+        sas nval
+        jmp nc8
+        jda opcls
+        dac ncc
+        jmp nc8
+nc4,
+        lac ocp
+        add [4]
+        dac ocp
+        idx oci
+        isp ocn
+        jmp nc3
+
+        // An IOT, or a call by another name.
+nc6,
+        lac ntype
+        sza
+        jmp nc7
+        lac nval
+        and [0770000]
+        sad [0700000]
+        jmp nc6a
+        jmp nc8
+nc6a,
+        lac [6]
+        dac ncc
+        jmp nc8
+nc7,
+        sad [1]
+        jmp nc7a
+        jmp nc8
+nc7a,
+        lac nval
+        add [010000]
+        and [0740000]
+        sad [OJMS]
+        jmp nc7b
+        jmp nc8
+nc7b,
+        lac [7]
+        dac ncc
+
+        // Packed, the first entry in the high bits.
+nc8,
+        lac ncw
+        ral 3s
+        ior ncc
+        dac ncw
+        lac nce
+        add [6]
+        dac nce
+        isp ncf
+        jmp nc1
+        lac ncw
+        dac i ncp
+        idx ncp
+        dzm ncw
+        law i 6
+        dac ncf
+        jmp nc1
+
+        // The last word, its entries moved to the high bits.
+nc9,
+        lac ncf
+        sad [0777771]
+        jmp nclsx
+nc10,
+        lac ncw
+        ral 3s
+        dac ncw
+        isp ncf
+        jmp nc10
+        lac ncw
+        dac i ncp
+nclsx,  jmp .
+
+// The class of op table entry oci, by the table's order.
+// Entry: oci = the entry's index; AC is ignored.
+// Exit: AC = the class, 1 to 5.
+// IO is preserved.
+// Called via jda.
+opcls,  0
+        dap opclsx
+        lac oci
+        sub [014]
+        sma
+        jmp opc1
+        lac [1]
+        jmp opclsx
+opc1,
+        sza
+        jmp opc2
+        lac [2]
+        jmp opclsx
+opc2,
+        lac oci
+        sub [047]
+        sma
+        jmp opc3
+        lac [3]
+        jmp opclsx
+opc3,
+        lac oci
+        sub [0103]
+        sma
+        jmp opc4
+        lac [4]
+        jmp opclsx
+opc4,
+        lac [5]
+opclsx, jmp .
+
+// The names' words.
+nce,    0
+ncp,    0
+ncw,    0
+ncf,    0
+ncq,    0
+ncr,    0
+ncn,    0
+ncc,    0
+nn0,    0                           // the n.out entry, four words of name,
+nn1,    0
+nn2,    0
+nn3,    0
+ntype,  0                           // its type,
+nval,   0                           // and its value
+ocp,    0
+ocq,    0
+oci,    0
+ocn,    0
+
+
+// The opcode names as7am1 knows, by class (translate.c's opNames).
+// Each entry is the value, then the name in three words.
+// The classes' entries are memory reference 0-013, law 014, operate 015-046,
+// EAE 047-0102, sys 0103.
+optab,
+        0040000; 0144141; 0143040; 0040040  // dac
+        0100000; 0152155; 0163040; 0040040  // jms
+        0140000; 0144172; 0155040; 0040040  // dzm
+        0200000; 0154141; 0143040; 0040040  // lac
+        0240000; 0170157; 0162040; 0040040  // xor
+        0300000; 0141144; 0144040; 0040040  // add
+        0340000; 0164141; 0144040; 0040040  // tad
+        0400000; 0170143; 0164040; 0040040  // xct
+        0440000; 0151163; 0172040; 0040040  // isz
+        0500000; 0141156; 0144040; 0040040  // and
+        0540000; 0163141; 0144040; 0040040  // sad
+        0600000; 0152155; 0160040; 0040040  // jmp
+        0760000; 0154141; 0167040; 0040040  // law
+        0740000; 0157160; 0162040; 0040040  // opr
+        0740000; 0156157; 0160040; 0040040  // nop
+        0740001; 0143155; 0141040; 0040040  // cma
+        0740002; 0143155; 0154040; 0040040  // cml
+        0740004; 0157141; 0163040; 0040040  // oas
+        0740010; 0162141; 0154040; 0040040  // ral
+        0740020; 0162141; 0162040; 0040040  // rar
+        0740040; 0150154; 0164040; 0040040  // hlt
+        0740040; 0170170; 0040040; 0040040  // xx
+        0740100; 0163155; 0141040; 0040040  // sma
+        0740200; 0163172; 0141040; 0040040  // sza
+        0740400; 0163156; 0154040; 0040040  // snl
+        0741000; 0163153; 0160040; 0040040  // skp
+        0741100; 0163160; 0141040; 0040040  // spa
+        0741200; 0163156; 0141040; 0040040  // sna
+        0741400; 0163172; 0154040; 0040040  // szl
+        0742010; 0162164; 0154040; 0040040  // rtl
+        0742020; 0162164; 0162040; 0040040  // rtr
+        0744000; 0143154; 0154040; 0040040  // cll
+        0744002; 0163164; 0154040; 0040040  // stl
+        0744010; 0162143; 0154040; 0040040  // rcl
+        0744020; 0162143; 0162040; 0040040  // rcr
+        0750000; 0143154; 0141040; 0040040  // cla
+        0750001; 0143154; 0143040; 0040040  // clc
+        0750004; 0154141; 0163040; 0040040  // las
+        0750010; 0147154; 0153040; 0040040  // glk
+        0640000; 0145141; 0145040; 0040040  // eae
+        0640001; 0157163; 0143040; 0040040  // osc
+        0640002; 0157155; 0161040; 0040040  // omq
+        0640004; 0143155; 0161040; 0040040  // cmq
+        0640323; 0144151; 0166040; 0040040  // div
+        0640444; 0156157; 0162155; 0040040  // norm
+        0640600; 0154154; 0163040; 0040040  // lls
+        0641600; 0143154; 0154163; 0040040  // clls
+        0640700; 0141154; 0163040; 0040040  // als
+        0640500; 0154162; 0163040; 0040040  // lrs
+        0641000; 0145143; 0154141; 0040040  // ecla
+        0641001; 0154141; 0143163; 0040040  // lacs
+        0641002; 0154141; 0143161; 0040040  // lacq
+        0644000; 0141142; 0163040; 0040040  // abs
+        0644323; 0144151; 0166163; 0040040  // divs
+        0650000; 0143154; 0161040; 0040040  // clq
+        0650323; 0146162; 0144151; 0166040  // frdiv
+        0652000; 0154155; 0161040; 0040040  // lmq
+        0653122; 0155165; 0154040; 0040040  // mul
+        0653323; 0151144; 0151166; 0040040  // idiv
+        0657323; 0151144; 0151166; 0163040  // idivs
+        0654323; 0146162; 0144151; 0166163  // frdivs
+        0657122; 0155165; 0154163; 0040040  // muls
+        0660444; 0156157; 0162155; 0163040  // norms
+        0664000; 0147163; 0155040; 0040040  // gsm
+        0660500; 0154162; 0163163; 0040040  // lrss
+        0660600; 0154154; 0163163; 0040040  // llss
+        0660700; 0141154; 0163163; 0040040  // alss
+        0020000; 0163171; 0163040; 0040040  // sys
+
+
+        constants
+start 020000

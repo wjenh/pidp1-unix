@@ -1,0 +1,495 @@
+// The kernel's fourth part, after 1970's s4.s, with the free list, copying,
+// the cache, the drum driver and the halt.
+// Bank 0, the window open.
+// Needs unix.ah.
+// Every routine here but halt returns by a dap-form jmp, and none is
+// re-entered.
+
+// Allocate a block (s4.s:405-431).
+// It is taken from sFblks from the top down, sFblks being refilled from the
+// chain block sNxfblk names when it is empty.
+// The block is zeroed on the drum, and dskbuf holds its zeros.
+// Exit: AC = the block number.
+// IO is clobbered.
+// Halts HDISK when no block is free.
+// Called by jda.
+alloc,  0
+        dap alX
+alTop,  lac sNfblks
+        sub [1]
+        spa                 // skip if a free block number is cached
+        jmp alRef
+        dac sNfblks
+        add [sFblks]
+        dac alP
+        lac i alP
+        dac alB
+        lac [dskbuf]
+        dac cpDst
+        law BLKW
+        jda copyz
+        lac alB
+        jda dskwr
+        dzm savblk          // the system block is written at the call's exit
+        lac alB
+alX,    jmp .
+alRef,  lac sNxfblk
+        sza
+        jmp al1
+        law HDISK
+        jmp halt
+al1,    dac sFblks          // the chain block itself is taken last
+        jda dskrd
+        lac dskbuf
+        dac sNxfblk
+        lac [dskbuf+1]
+        dac cpSrc
+        lac [sFblks+1]
+        dac cpDst
+        law NFBLKS-1
+        jda copy
+        law NFBLKS
+        dac sNfblks
+        jmp alTop
+
+// Free a block (s4.s:434-456).
+// It goes into sFblks, or when that is full, the block becomes the chain's
+// new head holding the nine above sFblks's first.
+// Entry: AC = the block number.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+free,   0
+        dap frX
+        lac sNfblks
+        sad [NFBLKS]
+        jmp fr1
+        add [sFblks]
+        dac alP
+        lac free
+        dac i alP
+        dzm savblk
+        idx sNfblks
+frX,    jmp .
+fr1,    lac sNxfblk
+        dac dskbuf
+        lac [sFblks+1]
+        dac cpSrc
+        lac [dskbuf+1]
+        dac cpDst
+        law NFBLKS-1
+        jda copy
+        lac free
+        dac sNxfblk
+        jda dskwr
+        dzm savblk
+        law 1
+        dac sNfblks
+        jmp frX
+
+// Copy words from any bank to any bank.
+// Entry: AC = the count, 1 or more; cpSrc and cpDst = 16-bit addresses.
+// Exit: cpSrc and cpDst one past the last word.
+// AC and IO are clobbered.
+// Called by jda.
+copy,   0
+        dap cyX
+        lac copy
+        cma
+        dac cpCnt
+cyL,    lac i cpSrc
+        dac i cpDst
+        idx cpSrc
+        idx cpDst
+        isp cpCnt           // the count is a negated positive, never -0
+        jmp cyL
+cyX,    jmp .
+
+// Clear words in any bank.
+// Entry: AC = the count, 1 or more; cpDst = a 16-bit address.
+// Exit: cpDst one past the last word.
+// AC is clobbered, IO is preserved.
+// Called by jda.
+copyz,  0
+        dap czX
+        lac copyz
+        cma
+        dac cpCnt
+czL,    dzm i cpDst
+        idx cpDst
+        isp cpCnt
+        jmp czL
+czX,    jmp .
+
+// Find a block in the cache (s4.s:653-669).
+// Entry: AC = the block number; 0 finds a free buffer.
+// Exit: found, no skip, with dbP at its buffer; not found, a skip.
+// AC is clobbered, IO is preserved.
+// Called by jda.
+srcdbs, 0
+        dap sdX
+        law i NDSKBS
+        dac dbN
+        lac [DSKBS]
+        dac dbP
+sd1,    lac srcdbs
+        sad i dbP           // skip if not this buffer
+        jmp sdX
+        lac dbP
+        add [DSKBW]
+        dac dbP
+        isp dbN
+        jmp sd1
+        idx sdX
+sdX,    jmp .
+
+// The cache's order is kept in dbOrd, the four buffers' addresses, the
+// least recent first.
+// 1970 kept the order by moving the buffers themselves, 65 words a place
+// (s4.s:671-700), which on the PDP-1 costs more than a drum revolution a
+// block.
+// The same order kept in four pointers costs nothing.
+// Make dbP's buffer the most recent.
+// Entry: dbP = a buffer.
+// Exit: dbP unchanged.
+// AC and IO are clobbered.
+// Called by jda.
+dbuse,  0
+        dap duX
+        lac [dbOrd]
+        dac duP
+du1,    lac i duP
+        sad dbP             // skip if not this place
+        jmp du2
+        idx duP
+        jmp du1
+du2,    lac duP             // the places after it move down one
+        sad [dbOrd+NDSKBS-1]
+        jmp du3
+        add [1]
+        dac duQ
+        lac i duQ
+        dac i duP
+        lac duQ
+        dac duP
+        jmp du2
+du3,    lac dbP
+        dac i duP
+duX,    jmp .
+
+// A buffer for a block not in the cache, a free one, else the least recent.
+// Exit: dbP = the buffer.
+// AC and IO are clobbered.
+// Called by jda.
+dbtake, 0
+        dap dtX
+        cla
+        jda srcdbs
+        jmp dtX             // a free buffer, at dbP
+        lac dbOrd
+        dac dbP
+dtX,    jmp .
+
+// Put dskbuf in the cache as block dskaddr, the most recent (s4.s:671-700).
+// It goes in the block's buffer when that is there already, else in a free
+// one or the least recent.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+collapse, 0
+        dap clX
+        lac dskaddr
+        jda srcdbs
+        jmp cl1             // there already, at dbP
+        jda dbtake
+cl1,    lac dskaddr
+        dac i dbP
+        jda dbuse
+        lac dbP
+        add [1]
+        dac cpDst
+        lac [dskbuf]
+        dac cpSrc
+        law BLKW
+        jda copy
+clX,    jmp .
+
+// Read a block into dskbuf, from the cache when it is there (s4.s:703-724).
+// Entry: AC = the block number, 2 to FSLAST, else the halt HBLOCK.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+dskrd,  0
+        dap drX
+        lac dskrd
+        jda chkblk
+        sad dskaddr         // skip if not in dskbuf already
+        jmp drX
+        dac dskaddr
+        jda srcdbs
+        jmp dr1             // in the cache
+        dzm dioWr
+        lac [dskbuf]
+        dac dsCore
+        lac dskaddr
+        jda dskio
+        jda collapse
+        jmp drX
+dr1,    jda dbuse           // its words to dskbuf
+        lac dbP
+        add [1]
+        dac cpSrc
+        lac [dskbuf]
+        dac cpDst
+        law BLKW
+        jda copy
+drX,    jmp .
+
+// A block's words where they lie, for reading in place.
+// They are in dskbuf when it holds the block (what dskrd would give), else
+// in the block's buffer in the cache, read from the drum into a free or the
+// least recent buffer when it is not there.
+// dskbuf and dskaddr are left alone.
+// The words are good until the next routine here, and nothing may be
+// written to them.
+// Entry: AC = the block number, 2 to FSLAST, else the halt HBLOCK.
+// Exit: AC = a 16-bit pointer to the block's first word.
+// IO is clobbered.
+// Called by jda.
+dskget, 0
+        dap dgtX
+        lac dskget
+        jda chkblk
+        sas dskaddr         // skip if in dskbuf
+        jmp dgt1
+        lac [dskbuf]
+        jmp dgtX
+dgt1,   jda srcdbs
+        jmp dgt2            // in the cache
+        jda dbtake
+        dzm i dbP           // free while it fills, in case the drum fails
+        lac dbP
+        add [1]
+        dac dsCore
+        dzm dioWr
+        lac dskaddr
+        dac dgtA
+        lac dskget
+        jda dskio
+        lac dgtA
+        dac dskaddr
+        lac dskget
+        dac i dbP
+dgt2,   jda dbuse
+        lac dbP
+        add [1]
+dgtX,   jmp .
+
+// Write dskbuf to a block, and through to the cache (s4.s:728-736).
+// Entry: AC = the block number, 2 to FSLAST, else the halt HBLOCK.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+dskwr,  0
+        dap dwX
+        lac dskwr
+        jda chkblk
+        law 1
+        dac dioWr
+        lac [dskbuf]
+        dac dsCore
+        lac dskwr
+        jda dskio
+        jda collapse
+dwX,    jmp .
+
+// A block number checked against the file system, as 1970 checked it
+// against 2 to 7999 with betwen before each transfer (s4.s:704-707).
+// Entry: AC = the block number.
+// Exit: AC unchanged.
+// Outside 2 to FSLAST, the halt HBLOCK.
+// IO is preserved.
+// Called by jda.
+chkblk, 0
+        dap ckX
+        lac chkblk
+        sub [FSFIRST]
+        spa                 // skip if 2 or more
+        jmp ck1
+        lac chkblk
+        sub [FSLAST+1]
+        spa                 // skip if past the last
+        jmp ck2
+ck1,    law HBLOCK
+        jmp halt
+ck2,    lac chkblk
+ckX,    jmp .
+
+// Move a block between core and the drum (s4.s:742-801).
+// One transfer, the busy bit polled, ten tries on an error, then the halt
+// HDRUM.
+// Block b is slot b mod 64 of field b / 64, at word 64 x ((slot x
+// INTERLEAVE) mod 64) of its field.
+// The transfer's end break is taken by brk, which does nothing for it.
+// At the cold start, with breaks off, it waits, and the cold start clears
+// it (Docs/UsingType23Drum.md, Interrupts).
+// Entry: AC = the block number; dioWr = 0 to read, else to write; dsCore =
+//        the 16-bit core address, dskbuf or a buffer in the cache.
+// Exit: dskaddr = the block number.
+// AC and IO are clobbered.
+// Called by jda.
+dskio,  0
+        dap dsX
+        lac dskio
+        dac dskaddr
+        and [077]           // the slot
+        mul [INTERLEAVE]
+        scr 1s
+        dio dsT             // slot x INTERLEAVE, from IO
+        lac dsT
+        and [077]
+        ral 6s              // its first word in the field
+        dac dsFa
+        lac dskio
+        and [07700]
+        ral 6s              // the field, in bits 1-5
+        ior dsFa
+        dac dsFa
+        law i DRTRIES
+        dac dsTry
+ds1,    lac dsFa
+        dac dsT
+        lac dioWr
+        sza                 // skip for a read
+        jmp ds2
+        lac dsFa
+        ior [DRMRD]
+        dac dsT
+ds2,    lio dsT
+        dia
+        lac [BLKW]
+        dac dsT
+        lac dioWr
+        sza i               // skip for a write
+        jmp ds3
+        lac dsFa
+        and [FIELDBITS]
+        ior [DRMWRT+BLKW]
+        dac dsT
+ds3,    lio dsT
+        dwc
+        lio dsCore
+        dcl
+ds4,    cks                 // busy until the last word has moved
+        dio dsT
+        lac dsT
+        and [CKSDRM]
+        sza
+        jmp ds4
+        cli
+        t23dra
+        dio dsT
+        lac dsT
+        and [DRERR]
+        sza i               // skip on an error
+        jmp dsX
+        isp dsTry
+        jmp ds1
+        law HDRUM
+        jmp halt
+dsX,    jmp .
+
+// Write the system block if a call changed the free list (s1.s:63-68).
+// sysdata, then zeros, go to block 0, past the cache.
+// sysdata is copied with breaks off, since the break routine adds to its
+// time.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+syssav, 0
+        dap ssX
+        lac savblk
+        sza                 // skip if the free list changed
+        jmp ssX
+        lac [dskbuf]
+        dac cpDst
+        law BLKW
+        jda copyz
+        lac [sysdata]
+        dac cpSrc
+        lac [dskbuf]
+        dac cpDst
+        lsm
+        law SYSDLEN
+        jda copy
+        esm
+        law 1
+        dac dioWr
+        dac savblk
+        lac [dskbuf]
+        dac dsCore
+        cla
+        jda dskio
+ssX,    jmp .
+
+// Stop the machine, since the kernel cannot go on (s4.s:804-810).
+// Where 1970 halted silently, the reason is typed on the operator's console
+// first, and only then kept in hltwhy, so a reason there means its message
+// is out.
+// Entry: AC = the reason, an H define of unix.ah.
+// Reached by jmp, and never returns.
+// Continue halts again.
+halt,   dac hltRsn
+        lsm
+        lac hltRsn
+        add [hmTab-1]
+        dac sysP
+        lac i sysP
+        jda tmsg
+        lac hltRsn
+        dac hltwhy
+        hlt
+        jmp .-1
+
+// Type a message on the typewriter, the operator's console, in lower case.
+// Breaks must be off.
+// The typewriter's completion leaves a break pending, which the caller
+// clears with cbs before it turns them on.
+// Entry: AC = the message, am1 text words ending in a word TSTOP.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+tmsg,   0
+        dap tmX
+        lio [TLOWER]
+        tyo i
+        lac tmsg
+        jda typetext
+tmX,    jmp .
+
+// The messages, and the halt reasons' table of them, indexed from 1.
+msUnix, text "\nPDP-1 unix\n"
+        TSTOP
+hmExit, text "\nexit\n"
+        TSTOP
+hmBank, text "\nbad bank\n"
+        TSTOP
+hmHalt, text "\nhalt\n"
+        TSTOP
+hmDisk, text "\nout of disk\n"
+        TSTOP
+hmDrum, text "\ndrum error\n"
+        TSTOP
+hmBlk,  text "\nbad block\n"
+        TSTOP
+hmBig,  text "\nfile too big\n"
+        TSTOP
+hmInit, text "\nno init\n"
+        TSTOP
+hmDcs,  text "\nno terminals\n"
+        TSTOP
+hmTab,  hmExit              // 1 HEXIT
+        hmBank              // 2 HBADBK
+        hmHalt              // 3, unused
+        hmDisk              // 4 HDISK
+        hmDrum              // 5 HDRUM
+        hmBlk               // 6 HBLOCK
+        hmBig               // 7 HBIG
+        hmInit              // 010 HNOINIT
+        hmDcs               // 011 HDCS
+hmTabE,
+assert hmTabE-hmTab == HDCS, "a message for each halt reason"

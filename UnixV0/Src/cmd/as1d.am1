@@ -1,0 +1,266 @@
+as1d
+// as1d is as1's sixth overlay, the fifth in the as1x file.
+// It writes the PDP-1 words of the data words, arguments, law, negative
+// literals, sys and IOTs, with their reports, as records to the second
+// stream in as1t.
+// See as1.am1, and translate.c's dataText.
+#include "unixsys.ah"
+        octal
+        bank 2
+#include "as1c.ac"
+
+OV/
+// The data, law, negative literals, sys and IOTs in order; then the operate
+// instructions' generator.
+        lac [SDAT]
+        jda sopen
+        dzm k
+d1,
+        lac lastk
+        sub k
+        spa                         // skip while k is not past the last word stored
+        jmp d9
+        lac k
+        jda getf
+        dac kf
+        dzm nit
+        dzm hask
+        dzm pone
+        and [KMASK]
+        sza i
+        jmp d8                      // a reserved word, 0, no record
+        sas [KCODE]
+        jmp gdata
+        lac kf
+        and [CMASK]
+        sad [CMEM]
+        jmp d8
+        sad [COPR]
+        jmp d8
+        sad [CEAE]
+        jmp d8
+        lac k
+        jda getv
+        dac kv
+        lac kf
+        and [CMASK]
+        sad [CLAW]
+        jmp glaw
+        sad [CLIT]
+        jmp glit
+        sad [CSYS]
+        jmp gsys
+
+        // Anything else is an IOT, kept.
+        lac k
+        lio [M_IOT]
+        jda report
+        lac kv
+        jda put
+gend,
+        jda emit
+d8,
+        idx k
+        jmp d1
+
+        // A data word or an argument; an entry's three words.
+gdata,
+        jda dataw
+        lac kf
+        and [FENT]
+        sza i
+        jmp gend
+        lac kf
+        and [0777]
+        add [P_DAP+0110]
+        jda put
+        lac k
+        jda mapa
+        lac [P_LAC]
+        jda putop
+        jmp gend
+d9,
+        lac [SDAT]
+        jda sclose
+        lac [OVH]
+        jmp ovload
+
+// law, of a relocatable address, a number in the program, or a small number,
+// loaded from a literal.
+// glaw, glit and gsys are entered by jmp from the loop above with k, kf and
+// kv set; each leaves by jmp gend.
+glaw,
+        lac kv
+        and [017777]
+        sub [010000]
+        dac ti
+        lac kf
+        and [FREL]
+        sza i
+        jmp gl2
+        lac ti
+        jda dref
+        lac [P_LAW]
+        jda putop
+        jmp gl9
+gl2,
+        lac ti
+        spa
+        jmp gl3
+        ior [P_LAW]
+        jda put
+        jmp gl9
+gl3,
+        lac [P_LAC]
+        lio kv
+        jda putl
+gl9,
+        lac k
+        jda cspan
+        jmp gend
+
+// A negative literal executed, as law i n, or loaded from a literal.
+glit,
+        lac kv
+        cma
+        add [1]
+        dac gln                     // 01000000 less the word
+        sub [010000]
+        sma
+        jmp gli2
+        lac gln
+        ior [P_LAW|P_I]
+        jda put
+        jmp gend
+gli2,
+        lac gln
+        cma
+        dac glv
+        lac [P_LAC]
+        lio glv
+        jda putl
+        jmp gend
+
+// sys n becomes cal n.
+gsys,
+        lac kv
+        sub [020000]
+        dac gsn
+        spa
+        jmp gsy1
+        sza i
+        jmp gsy1
+        sub [036]
+        spa
+        jmp gsy2
+gsy1,
+        lac k
+        lio [M_SYSR]
+        jda report
+gsy2,
+        lac gsn
+        sas [025]
+        jmp gsy3
+        lac k
+        lio [M_SYSL]
+        jda report
+gsy3,
+        lac gsn
+        and [0777]
+        ior [P_CAL]
+        jda put
+        jmp gend
+
+// A data word's PDP-1 word, put as an item of word k.
+// A relocatable one's address is mapped; a negative difference is made one
+// less; a number is kept.
+// translate.c's dataText.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+dataw,  0
+        dap datawx
+        dzm oadr
+        dzm ob
+        dzm oc
+        lio [0]
+        lac k
+        jda getr
+        dac dw0
+        sza i
+        jmp dw9                     // not stored, 0
+        lac k
+        jda getv
+        dac dwv
+        lac k
+        jda cspan
+        lac dw0
+        and [RREL]
+        sza i
+        jmp dw3
+        lac dwv
+        and [0760000]
+        dac dwh
+        lac dwv
+        and [017777]
+        sub [010000]
+        dac dwt
+        sma
+        jmp dw2
+        lac k
+        lio [M_PTRO]
+        jda report
+dw2,
+        lac dwt
+        jda dref
+        lac dwh
+        jda putop
+        jmp datawx
+dw3,
+        lac dw0
+        and [RMINUS]
+        sza i
+        jmp dw4
+        lac dwv
+        sma
+        jmp dw4
+        cma
+        add [1]
+        cma
+        jda put
+        jmp datawx
+dw4,
+        lac dwv
+        and [0770000]
+        sas [010000]
+        jmp dw5
+        lac kf
+        and [FSTO]
+        sza
+        jmp dw5
+        lac k
+        lio [M_N4096]
+        jda repwarn
+dw5,
+        lac dwv
+        jda put
+        jmp datawx
+dw9,
+        cla
+        jda put
+datawx, jmp .
+
+#include "as1gr.ac"
+#include "as1gi.ac"
+
+ti,     0
+gln,    0
+glv,    0
+gsn,    0
+dw0,    0
+dwv,    0
+dwh,    0
+dwt,    0
+
+        constants
+start 020000

@@ -1,0 +1,1843 @@
+p
+// Translated by as7am1 from the PDP-7 source cmd/p1.s cmd/p2.s cmd/p3.s cmd/p4.s cmd/p5.s
+// for a process bank.
+// Its layout is word 0 the jump to the start, 020-077 the translator's words, 0100-0107
+// the system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+#include "unixsys.ah"
+// by hand: the 340's command words, for the display (p5.s's lists, rewritten at the end)
+#include <TYPE340/type340cmds.ah>
+// by hand: the game's pace, P_K, is k of 1970's steps in each frame, 1 (1970's frame) or 2.
+// The stick's buttons are taken and each ball moved and slowed k times, the edges and the
+// collisions tested once, after the last.
+#ifndef P_K
+#define P_K 2
+#endif
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// by hand: the hand code's words (the end of the program says what each routine does)
+h_pbs,  0       // the push buttons, 1970's pbsflgs, bit n for button n
+h_now,  0       // the time's low word, in sixtieths
+h_tpen, 0       // when the pen last hit a button
+h_pen,  0       // that button's bits
+h_p,    0       // pointers and a count
+h_r,    0
+h_k,    0
+h_w,    0       // working words
+h_w2,   0
+h_g5,   0       // getball's and putball's product by 5
+#if P_K != 1
+h_kc,   0       // the pace's counts of the stick's steps and a ball's steps
+h_kb,   0
+#endif
+h_hx,   0       // the x product's high word, in the test of two balls
+h_q,    0       // 1970's x**2+y**2 in q, for ballball
+h_d,    0       // 0300000 less it and 1, ballball's multiplicand
+h_ta,   0       // h_tc's multiplier, operand, product's sign,
+h_tv,   0       // and the shift that ends it
+h_tng,  0
+h_tsh,  0
+h_fsh,  0       // h_fc's shift
+h_bp,   0       // the ball's block in the list, from its y word
+h_vp,   0       // the ball's word of h_vis
+h_skn,  0       // nonzero when the stick was drawn this frame
+h_sx,   0       // the stick's start, x and y, and its x and y lengths
+h_sy,   0
+h_sdx,  0
+h_sdy,  0
+h_cs,   0       // h_clp's start, the length clipped and the other
+h_cd,   0
+h_ce,   0
+0100/
+        SYSFRAME()
+0145/
+w_10000,cla
+        dac x_t
+        lat
+        ior x_t
+w_10001,dac u__sw
+// by hand: no sysloc (p1.s:7-9); the push buttons are h_pbs, made by h_rdpb.
+        law h_pbs
+w_10004,dac u__pb
+w_10005,jda u_ballinit
+// by hand: the 340's list is h_lst, built once with every ball hidden, and captured once
+// (p1.s:11-30, where 1970 copied the outline into its list past the balls' records).
+        jsp h_init
+        law h_lst
+w_10016,cal 027
+w_10033,jda u_dump
+// by hand: the buttons and the pen, read into h_pbs at each pass, as 1970's kernel read
+// its push buttons at each tick.
+u_loop, jda h_rdpb
+        lac u_waitup
+w_10035,sza
+w_10036,jmp w_10052
+w_10037,lac i u__pb
+w_10040,ral 5s
+        and [0777740]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000037]
+        ior x_t
+w_10041,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10042,lio x_lnk
+        spi i
+w_10043,jmp w_10046
+w_10044,jda u_dump
+w_10045,jmp w_10062
+w_10046,sma
+w_10047,jmp w_10062
+w_10050,jda u_restore
+w_10051,jmp w_10062
+w_10052,lac i u__pb
+w_10053,ral 5s
+        and [0777740]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000037]
+        ior x_t
+w_10054,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_10055,lio x_lnk
+        spi
+w_10056,jmp w_10062
+w_10057,sma i
+w_10060,jmp w_10062
+w_10061,dzm u_waitup
+w_10062,cal 017
+w_10063,lai
+w_10064,sad u_stime
+w_10065,jmp u_loop
+w_10066,add u_dm1
+w_10067,sad u_stime
+w_10070,jmp u_loop
+w_10071,add u_d1
+w_10072,dac u_stime
+w_10073,lac i u__pb
+w_10074,ral 7s
+        and [0777600]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000177]
+        ior x_t
+w_10075,sma i
+w_10076,cal 016
+// by hand: the frame's list is the balls' blocks, from the first (p1.s:75-76, where 1970
+// started a new list after the outline); the stick not yet drawn.
+        law h_blk
+        dac h_bp
+        law h_vis
+        dac h_vp
+        dzm h_skn
+w_10101,law i 020
+w_10102,dac u_displist+01
+#if P_K != 1
+// by hand: the stick's buttons taken k times while the cue is still.
+        law i P_K
+        dac h_kc
+#endif
+w_10103,jda u_getball
+w_10104,u_ball1
+w_10105,u_displist+01
+w_10106,lac u_ball1+03
+w_10107,lia
+w_10110,lac u_ball1+04
+w_10111,dac x_t
+        lai
+        ior x_t
+w_10112,sza
+w_10113,jmp w_10120
+w_10114,jda u_stickcon
+w_10115,jda u_putball
+w_10116,u_ball1
+w_10117,u_displist+01
+#if P_K != 1
+        idx h_kc
+        sza
+        jmp w_10103
+#endif
+w_10120,jda u_getball
+w_10121,u_ball1
+w_10122,u_displist+01
+w_10123,lac u_ball1
+w_10124,sma i
+// by hand: a ball in a pocket is not drawn.
+// Its block is hidden.
+        jmp h_pkt
+w_10126,lac 011
+w_10127,dac 016
+#if P_K != 1
+// by hand: each ball moved and slowed k times.
+// The steps before the last end in frict, as 1970's frame did; the last draws the ball and
+// goes on to the edges.
+        law i P_K
+        dac h_kb
+        jmp h_stp
+h_stf,  jda u_frict
+h_stp,
+#endif
+// by hand: lrss 6 floors, as the PDP-7's two's complement shift did, where scr would
+// round a negative toward zero (h_fl6); and a negative sum is taken mod 2^16 as 1970's
+// mask of 0177777 took its two's complement word, by adding 2^16 first.
+w_10130,lac u_ball1+03
+w_10131,jda h_fl6
+w_10132,add u_ball1+01
+        spa
+        add h_b16
+w_10133,and u_o177777
+w_10134,dac u_ball1+01
+w_10135,lac u_ball1+04
+w_10136,jda h_fl6
+w_10137,add u_ball1+02
+        spa
+        add h_b16
+w_10140,and u_o177777
+w_10141,dac u_ball1+02
+#if P_K != 1
+        idx h_kb
+        sza
+        jmp h_stf               // not the last step
+#endif
+// by hand: the ball drawn in its block of the list, its circle shown (p1.s:119-137, where
+// 1970 wrote setx, sety and the circle's words into the list).
+        jsp h_dbl
+w_10162,jda u_frict
+w_10163,lac u_lefttest
+w_10164,add u_ball1+01
+w_10165,sma
+w_10166,jmp w_10177
+w_10167,jda u_pocketlr
+w_10170,jmp w_10327
+w_10171,lac u_ball1+03
+w_10172,sma
+w_10173,jmp w_10177
+w_10174,cma
+        sub [1]
+w_10175,add u_d1
+w_10176,dac u_ball1+03
+w_10177,lac u_bottest
+w_10200,add u_ball1+02
+w_10201,sma
+w_10202,jmp w_10213
+w_10203,jda u_pockettb
+w_10204,jmp w_10327
+w_10205,lac u_ball1+04
+w_10206,sma
+w_10207,jmp w_10213
+w_10210,cma
+        sub [1]
+w_10211,add u_d1
+w_10212,dac u_ball1+04
+w_10213,lac u_righttes
+w_10214,add u_ball1+01
+w_10215,sma i
+w_10216,jmp w_10227
+w_10217,jda u_pocketlr
+w_10220,jmp w_10327
+w_10221,lac u_ball1+03
+w_10222,sma i
+w_10223,jmp w_10227
+w_10224,cma
+        sub [1]
+w_10225,add u_d1
+w_10226,dac u_ball1+03
+w_10227,lac u_toptest
+w_10230,add u_ball1+02
+w_10231,sma i
+w_10232,jmp w_10243
+w_10233,jda u_pockettb
+w_10234,jmp w_10327
+w_10235,lac u_ball1+04
+w_10236,sma i
+w_10237,jmp w_10243
+w_10240,cma
+        sub [1]
+w_10241,add u_d1
+w_10242,dac u_ball1+04
+w_10243,lac u_displist+01
+w_10244,add u_d1
+w_10245,sma
+w_10246,jmp w_10327
+w_10247,dac u_displist+02
+// by hand: the pair's second ball tested in the list before it is copied.
+// In a pocket (p1.s:217-219), or 2048 or more apart in x (h_near's first test, the same
+// words), it is passed by, 016 left past it as the five loads of 1970's copy leave it; near
+// in x, 016 is set back before it and the copy made as 1970's.
+h_pr,   idx 016                 // its sflg
+        lac i 016
+        spa
+        jmp h_pr1               // in a pocket
+        idx 016                 // its x
+        lac u_ball1+01
+        sub i 016               // dx
+        add h_d2k
+        spa
+        jmp h_pr2               // below -2048
+        sub h_d4k
+        sma
+        jmp h_pr2               // 2048 or more
+        law i 2
+        add 016
+        dac 016
+        jmp w_10250
+h_pr1,  law 4
+        add 016
+        dac 016
+        jmp w_10325
+h_pr2,  law 3
+        add 016
+        dac 016
+        jmp w_10325
+w_10250,idx 016
+        lac i 016
+w_10251,dac u_ball2
+w_10252,idx 016
+        lac i 016
+w_10253,dac u_ball2+01
+w_10254,idx 016
+        lac i 016
+w_10255,dac u_ball2+02
+w_10256,idx 016
+        lac i 016
+w_10257,dac u_ball2+03
+w_10260,idx 016
+        lac i 016
+w_10261,dac u_ball2+04
+w_10262,lac u_ball2
+w_10263,sma i
+w_10264,jmp w_10325
+// by hand: the squares of the two balls' distances (p1.s:220-245, the EAE's gsm, muls and
+// lrss), by h_near, which skips when they are near and leaves 1970's x**2+y**2 in h_q.
+w_10265,jsp h_near
+w_10320,jmp w_10325
+w_10321,jda u_ballball
+w_10322,jda u_putball
+w_10323,u_ball2
+w_10324,u_displist+02
+w_10325,idx u_displist+02
+        sza
+w_10326,jmp h_pr
+// by hand: the next ball's block and its word of h_vis.
+w_10327,lac h_bp
+        add h_bs
+        dac h_bp
+        idx h_vp
+        jda u_putball
+w_10330,u_ball1
+w_10331,u_displist+01
+w_10332,idx u_displist+01
+        sza
+w_10333,jmp w_10120
+// by hand: the stick hidden when it was not drawn this frame (p1.s:258-259, where 1970
+// ended its list).
+        jsp h_eof
+w_10336,jmp u_loop
+u_frict,0000000
+        dap r_frict
+        lac u_frict
+w_10340,cla
+        dac x_t
+        lat
+        ior x_t
+w_10341,and u_d1
+w_10342,sza
+w_10343,jmp r_frict
+// by hand: the EAE's muls by frfac, 0774000, unsigned to the PDP-7 and negative to the
+// PDP-1's mul, is h_frc; gsm's magnitude is h_mag.
+w_10344,lac u_ball1+03
+w_10345,jda h_frc
+w_10350,dac u_ball1+03
+w_10351,lac u_ball1+04
+w_10352,jda h_frc
+w_10355,dac u_ball1+04
+w_10356,jda h_mag
+w_10357,dac u_displist+04
+w_10360,lac u_ball1+03
+w_10361,jda h_mag
+w_10362,add u_displist+04
+w_10363,add u_minvx
+w_10364,sma
+w_10365,jmp r_frict
+w_10366,dzm u_ball1+03
+w_10367,dzm u_ball1+04
+w_10370,jmp r_frict
+u_ballball,0000000
+        dap r_ballball
+        lac u_ballball
+// by hand: ballball's arithmetic (p2.s:29-178) is the EAE's throughout, so it is written
+// again, each step giving what the PDP-7 gave.
+// T(a, v) is 1970's EAE product of a and v (gsm on v, muls by a, then llss n), by h_t12
+// (n 6), h_t15 (n 3) and h_t16 (n 2), with a in AC and v in IO.
+// 1970's subtraction of x by complement, add and complement, which is AC - x in two's
+// complement, is a sub.
+// q is h_q (h_near); 0300000 less q and 1 (p2.s:30-31) is the multiplicand of sin and cos.
+w_10372,lac u_o300000
+        sub h_q
+        sub u_d1
+        dac h_d
+w_10377,lac u_ball2+02
+        sub u_ball1+02                  // p2.s:34-36
+        lio h_d
+        jda h_t12
+w_10407,dac u_sin
+w_10410,lac u_ball2+01
+        sub u_ball1+01                  // p2.s:40-42
+        lio h_d
+        jda h_t12
+w_10420,dac u_cos
+// the closing velocities, vp = T(cos, vx) + T(sin, vy) (p2.s:48-75)
+w_10421,lio u_ball1+03
+        lac u_cos
+        jda h_t15
+w_10430,dac u_displist+05
+w_10431,lio u_ball1+04
+        lac u_sin
+        jda h_t15
+w_10440,add u_displist+05
+w_10441,dac u_vp1
+w_10442,lio u_ball2+03
+        lac u_cos
+        jda h_t15
+w_10451,dac u_displist+05
+w_10452,lio u_ball2+04
+        lac u_sin
+        jda h_t15
+w_10461,add u_displist+05
+w_10462,dac u_vp2
+        sub u_vp1                       // p2.s:76-78
+w_10466,sma
+w_10467,jmp r_ballball
+// the tangential velocities, vt = T(cos, vy) - T(sin, vx) (p2.s:84-114)
+w_10470,lio u_ball1+03
+        lac u_sin
+        jda h_t15
+w_10477,dac u_displist+05
+w_10500,lio u_ball1+04
+        lac u_cos
+        jda h_t15
+        sub u_displist+05               // p2.s:95-97
+w_10512,dac u_vt1
+w_10513,lio u_ball2+03
+        lac u_sin
+        jda h_t15
+w_10522,dac u_displist+05
+w_10523,lio u_ball2+04
+        lac u_cos
+        jda h_t15
+        sub u_displist+05               // p2.s:111-113
+w_10535,dac u_vt2
+// x and y again, the closing parts exchanged (p2.s:119-178).
+// 1970's complement of the first term, added to the second and complemented, is the first
+// term less the second, ~(b + ~a) = a - b.
+w_10536,lio u_vt1                       // vx1 = T(cos, vp2) - T(sin, vt1)
+        lac u_sin
+        jda h_t15
+        dac u_displist+05
+        lio u_vp2
+        lac u_cos
+        jda h_t15
+        sub u_displist+05
+        dac u_ball1+03
+        lio u_vp2                       // vy1 = T(sin, vp2) + T(cos, vt1)
+        lac u_sin
+        jda h_t15
+        dac u_displist+05
+        lio u_vt1
+        lac u_cos
+        jda h_t15
+        add u_displist+05
+        dac u_ball1+04
+        lio u_vt2                       // vx2 = T(cos, vp1) - T(sin, vt2)
+        lac u_sin
+        jda h_t15
+        dac u_displist+05
+        lio u_vp1
+        lac u_cos
+        jda h_t15
+        sub u_displist+05
+        dac u_ball2+03
+        lio u_vp1                       // vy2 = T(sin, vp1) + T(cos, vt2)
+        lac u_sin
+        jda h_t15
+        dac u_displist+05
+        lio u_vt2
+        lac u_cos
+        jda h_t15
+        add u_displist+05
+w_10645,dac u_ball2+04
+w_10646,jmp r_ballball
+u_dump, 0000000
+        dap r_dump
+        lac u_dump
+w_10650,lac u_o17
+w_10651,cal 06
+w_10652,u_dmpname
+w_10653,sma i
+w_10654,cal 01
+w_10655,dac u_waitup
+w_10656,cal 05
+w_10657,u_qsin
+w_10660,0000001
+w_10661,lac u_waitup
+w_10662,cal 05
+w_10663,u_qcos
+w_10664,0000001
+w_10665,lac u_nballp
+w_10666,dzm x_lnk
+w_10667,mul w_10670
+        scr 1s
+        jmp w_10671
+w_10670,0000005
+w_10671,lai
+w_10672,dac w_10676
+w_10673,lac u_waitup
+w_10674,cal 05
+w_10675,x_end
+w_10676,0010000
+w_10677,lac u_waitup
+w_10700,cal 011
+w_10701,jmp r_dump
+u_restore,0000000
+        dap r_restore
+        lac u_restore
+w_10703,cal 03
+w_10704,u_dmpname
+w_10705,0000000
+w_10706,sma i
+w_10707,cal 01
+w_10710,dac u_waitup
+w_10711,cal 04
+w_10712,u_qsin
+w_10713,0000001
+w_10714,lac u_waitup
+w_10715,cal 04
+w_10716,u_qcos
+w_10717,0000001
+w_10720,lac u_nballp
+w_10721,dzm x_lnk
+w_10722,mul w_10723
+        scr 1s
+        jmp w_10724
+w_10723,0000005
+w_10724,lai
+w_10725,dac w_10731
+w_10726,lac u_waitup
+w_10727,cal 04
+w_10730,x_end
+w_10731,0010000
+w_10732,sad w_10731
+w_10733,sma spa
+w_10734,cal 01
+w_10735,lac u_waitup
+w_10736,cal 04
+w_10737,u_dump
+w_10740,0000001
+w_10741,sza
+w_10742,cal 01
+w_10743,lac u_waitup
+w_10744,cal 011
+w_10745,jmp r_restore
+u_middle,0100000
+u_high, 0167700
+u_low,  0010000
+u_ballinit,0000000
+        dap r_ballinit
+        lac u_ballinit
+w_10752,law i 020
+w_10753,dac u_displist+06
+w_10754,lac u_middle
+w_10755,dac u_ball1+01
+w_10756,lac u_low
+w_10757,dac u_ball1+02
+w_10760,dzm u_ball1+03
+w_10761,dzm u_ball1+04
+w_10762,dzm u_ball1
+w_10763,jda u_put
+w_10764,lac u_d1
+w_10765,dac u_ball1
+w_10766,lac u_high
+w_10767,dac u_ball1+02
+w_10770,lac [0763777]
+w_10771,add u_ball1+01
+w_10772,dac u_ball1+01
+w_10773,jda u_put
+w_10774,jda u_put
+w_10775,jda u_put
+w_10776,jda u_put
+w_10777,jda u_put
+w_11000,law i 03600
+w_11001,add u_ball1+02
+w_11002,dac u_ball1+02
+w_11003,lac [0763777]
+w_11004,add u_ball1+01
+w_11005,dac u_ball1+01
+w_11006,law i 06000
+w_11007,add u_ball1+01
+w_11010,dac u_ball1+01
+w_11011,jda u_put
+w_11012,jda u_put
+w_11013,jda u_put
+w_11014,jda u_put
+w_11015,law i 03600
+w_11016,add u_ball1+02
+w_11017,dac u_ball1+02
+w_11020,lac [0761777]
+w_11021,add u_ball1+01
+w_11022,dac u_ball1+01
+w_11023,jda u_put
+w_11024,jda u_put
+w_11025,jda u_put
+w_11026,law i 03600
+w_11027,add u_ball1+02
+w_11030,dac u_ball1+02
+w_11031,lac [0765777]
+w_11032,add u_ball1+01
+w_11033,dac u_ball1+01
+w_11034,jda u_put
+w_11035,jda u_put
+w_11036,law i 03600
+w_11037,add u_ball1+02
+w_11040,dac u_ball1+02
+w_11041,law i 06000
+w_11042,add u_ball1+01
+w_11043,dac u_ball1+01
+w_11044,jda u_put
+w_11045,jmp r_ballinit
+u_put,  0000000
+        dap r_put
+        lac u_put
+w_11047,jda u_putball
+w_11050,u_ball1
+w_11051,u_displist+06
+w_11052,law i 04001
+w_11053,cma
+        sub [1]
+w_11054,add u_ball1+01
+w_11055,dac u_ball1+01
+w_11056,idx u_displist+06
+w_11057,jmp r_put
+w_11060,jmp r_put
+u_getball,0000000
+        dap r_getball
+        lac u_getball
+w_11062,law i 01
+w_11063,add i r_getball
+w_11064,dac 010
+w_11065,idx r_getball
+w_11066,lac i r_getball
+w_11067,dac u_displist+07
+w_11070,lac u_nballp
+w_11071,add i u_displist+07
+// by hand: the product by bvsize, 5, by a shift and an add, P left in AC and IO as the mul
+// and lacq left it; and the five words copied straight through IO, x_ac the last and the
+// count 0 as the loop left them.
+w_11072,dzm x_lnk
+        dac h_g5
+        ral 2s
+        add h_g5
+        dac h_g5
+w_11076,add u_listpm1
+w_11077,dac 011
+w_11102,idx 011
+        lio i 011
+w_11103,idx 010
+        dio i 010
+        idx 011
+        lio i 011
+        idx 010
+        dio i 010
+        idx 011
+        lio i 011
+        idx 010
+        dio i 010
+        idx 011
+        lio i 011
+        idx 010
+        dio i 010
+        idx 011
+        lio i 011
+        idx 010
+        dio i 010
+        dio x_ac
+w_11104,dzm u_displist+07
+        lio h_g5
+w_11106,idx r_getball
+w_11107,jmp r_getball
+u_putball,0000000
+        dap r_putball
+        lac u_putball
+w_11111,law i 01
+w_11112,add i r_putball
+w_11113,dac 010
+w_11114,idx r_putball
+w_11115,lac i r_putball
+w_11116,dac u_displist+07
+w_11117,lac u_nballp
+w_11120,add i u_displist+07
+// by hand: as getball's.
+w_11121,dzm x_lnk
+        dac h_g5
+        ral 2s
+        add h_g5
+        dac h_g5
+w_11125,add u_listpm1
+w_11126,dac 011
+w_11131,idx 010
+        lio i 010
+w_11132,idx 011
+        dio i 011
+        idx 010
+        lio i 010
+        idx 011
+        dio i 011
+        idx 010
+        lio i 010
+        idx 011
+        dio i 011
+        idx 010
+        lio i 010
+        idx 011
+        dio i 011
+        idx 010
+        lio i 010
+        idx 011
+        dio i 011
+        dio x_ac
+w_11133,dzm u_displist+07
+        lio h_g5
+w_11135,idx r_putball
+w_11136,jmp r_putball
+u_stickcon,0000000
+        dap r_stickcon
+        lac u_stickcon
+// by hand: the stick drawn in its block of the list (p4.s:8-37, where 1970 wrote setx,
+// sety, vecx and vecy into its list), before the buttons turn it, as in 1970.
+w_11140,jsp h_dstk
+w_11172,lac i u__pb
+w_11173,lio x_lnk
+        rcl 1s
+        rir 1s
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_11174,sma
+        jmp s_11174
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+        jmp w_11176
+s_11174,lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+w_11175,jmp w_11214
+w_11176,sma
+w_11177,jmp w_11206
+w_11200,lio x_lnk
+        spi
+w_11201,jmp w_11231
+w_11202,jda u_rotate
+w_11203,u_mcsin
+w_11204,u_ccos
+w_11205,jmp w_11231
+w_11206,lio x_lnk
+        spi i
+w_11207,jmp w_11231
+w_11210,jda u_rotate
+w_11211,u_csin
+w_11212,u_ccos
+w_11213,jmp w_11231
+w_11214,sma
+w_11215,jmp w_11224
+w_11216,lio x_lnk
+        spi
+w_11217,jmp w_11231
+w_11220,jda u_rotate
+w_11221,u_mfsin
+w_11222,u_fcos
+w_11223,jmp w_11231
+w_11224,lio x_lnk
+        spi i
+w_11225,jmp w_11231
+w_11226,jda u_rotate
+w_11227,u_fsin
+w_11230,u_fcos
+w_11231,lac i u__pb
+w_11232,lio x_lnk
+        rcl 1s
+        rir 1s
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_11233,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_11234,sma
+        jmp s_11234
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        jmp w_11236
+s_11234,lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+w_11235,jmp w_11243
+w_11236,lac u_qcos
+w_11237,dac u_ball1+03
+w_11240,lac u_qsin
+w_11241,dac u_ball1+04
+w_11242,jmp r_stickcon
+w_11243,sma
+w_11244,jmp r_stickcon
+// by hand: lrss 1 floors (h_fl1), as at p1.s:107.
+w_11245,lac u_qcos
+w_11246,jda h_fl1
+w_11247,dac u_ball1+03
+w_11250,lac u_qsin
+w_11251,jda h_fl1
+w_11252,dac u_ball1+04
+w_11253,jmp r_stickcon
+u_rotate,0000000
+        dap r_rotate
+        lac u_rotate
+w_11255,lac i r_rotate
+w_11256,dac u_displist+011
+w_11257,lac i u_displist+011
+w_11260,dac u_displist+010
+w_11261,idx r_rotate
+w_11262,lac i r_rotate
+w_11263,dac u_displist+011
+w_11264,lac i u_displist+011
+w_11265,dac u_displist+011
+w_11266,idx r_rotate
+// by hand: the turn (p4.s:111-141), the EAE's gsm, muls and llss 2 as T(a, v) by h_t16
+// (ballball says how), s in 9f+t and c in 9f+t+1.
+// The new qsin is T(s, qcos) + T(c, qsin); the new qcos is T(c, qcos) + ~T(s, qsin), by
+// 1970's complement, which is one less than T(c, qcos) - T(s, qsin).
+w_11267,lio u_qsin
+        lac u_displist+011
+        jda h_t16
+w_11276,dac u_displist+012
+w_11277,lio u_qcos
+        lac u_displist+010
+        jda h_t16
+w_11306,add u_displist+012
+w_11307,dac u_displist+013
+w_11310,lio u_qsin
+        lac u_displist+010
+        jda h_t16
+w_11317,cma
+        sub u_d1
+w_11320,dac u_displist+012
+w_11321,lio u_qcos
+        lac u_displist+011
+        jda h_t16
+w_11330,add u_displist+012
+w_11331,dac u_qcos
+w_11332,lac u_displist+013
+w_11333,dac u_qsin
+w_11334,jmp r_rotate
+u_prad, 0002000
+u_pocketlr,0000000
+        dap r_pocketlr
+        lac u_pocketlr
+w_11337,lac u_ball1
+w_11340,sza i
+w_11341,jmp w_11367
+w_11342,law i 01
+w_11343,add u_prad
+w_11344,cma
+        sub [1]
+w_11345,add u_bottest
+w_11346,add u_ball1+02
+w_11347,sma i
+w_11350,jmp w_11371
+w_11351,lac u_prad
+w_11352,add u_toptest
+w_11353,add u_ball1+02
+w_11354,sma
+w_11355,jmp w_11371
+w_11356,law i 01
+w_11357,add u_middle
+w_11360,cma
+        sub [1]
+w_11361,add u_ball1+02
+w_11362,sma i
+        jmp w_11364
+w_11363,cma
+        sub [1]
+w_11364,add u_prad
+w_11365,sma
+w_11366,jmp w_11371
+w_11367,idx r_pocketlr
+w_11370,jmp r_pocketlr
+w_11371,law i 01
+w_11372,dac u_ball1
+w_11373,jmp r_pocketlr
+u_pockettb,0000000
+        dap r_pockettb
+        lac u_pockettb
+w_11375,lac u_ball1
+w_11376,sza i
+w_11377,jmp w_11414
+w_11400,law i 01
+w_11401,add u_prad
+w_11402,cma
+        sub [1]
+w_11403,add u_lefttest
+w_11404,add u_ball1+01
+w_11405,sma i
+w_11406,jmp w_11416
+w_11407,lac u_prad
+w_11410,add u_righttes
+w_11411,add u_ball1+01
+w_11412,sma
+w_11413,jmp w_11416
+w_11414,idx r_pockettb
+w_11415,jmp r_pockettb
+w_11416,law i 01
+w_11417,dac u_ball1
+w_11420,jmp r_pockettb
+u_toptest,0603077
+u_bottest,0774777
+u_righttes,0642477
+u_lefttest,0735377
+u_minvx,0775777
+u_fsin, 0000203
+u_csin, 0002534
+u_mfsin,0777574
+u_mcsin,0775243
+u_fcos, 0177777
+u_ccos, 0177761
+u_d1,   0000001
+u_o17,  0000017
+u_o300000,0300000
+u_dm1,  0777776
+u_o142000,0142000
+u_o164000,0164000
+u_o400000,0400000
+u_o177777,0177777
+u_o2000,0002000
+u_o100000,0100000
+u_o124000,0124000
+u_qsin, 0177777
+u_qcos, 0000000
+u_dmpname,0160144
+w_11452,0165155
+w_11453,0160040
+w_11454,0040040
+u_nballp,0000020
+u_listpm1,u_ball2+04
+u_outline,0065047
+w_11460,0140400
+w_11461,0164004
+w_11462,0220414
+w_11463,0124750
+w_11464,0225010
+w_11465,0221010
+w_11466,0124747
+w_11467,0224414
+w_11470,0221444
+w_11471,0120747
+w_11472,0221404
+w_11473,0224454
+w_11474,0126747
+w_11475,0221050
+w_11476,0225050
+w_11477,0126750
+w_11500,0220454
+w_11501,0225404
+w_11502,0122747
+w_11503,0225444
+u_circle,0212000
+w_11505,0220002
+w_11506,0220002
+w_11507,0224101
+w_11510,0220002
+w_11511,0224101
+w_11512,0224101
+w_11513,0224101
+w_11514,0224101
+w_11515,0224101
+w_11516,0224101
+w_11517,0224101
+w_11520,0224101
+w_11521,0224200
+w_11522,0224101
+w_11523,0224200
+w_11524,0224200
+w_11525,0224200
+w_11526,0224200
+w_11527,0224141
+w_11530,0224200
+w_11531,0224141
+w_11532,0224141
+w_11533,0224141
+w_11534,0224141
+w_11535,0224141
+w_11536,0224141
+w_11537,0224141
+w_11540,0224141
+w_11541,0220042
+w_11542,0224141
+w_11543,0220042
+w_11544,0220042
+w_11545,0220042
+w_11546,0220042
+w_11547,0220141
+w_11550,0220042
+w_11551,0220141
+w_11552,0220141
+w_11553,0220141
+w_11554,0220141
+w_11555,0220141
+w_11556,0220141
+w_11557,0220141
+w_11560,0220141
+w_11561,0220200
+w_11562,0220141
+w_11563,0220200
+w_11564,0220200
+w_11565,0220200
+w_11566,0220200
+w_11567,0220101
+w_11570,0220200
+w_11571,0220101
+w_11572,0220101
+w_11573,0220101
+w_11574,0220101
+w_11575,0220101
+w_11576,0220101
+w_11577,0220101
+w_11600,0220101
+w_11601,0220002
+w_11602,0220101
+w_11603,0220002
+w_11604,0220002
+u__pb,
+        .+01/
+u__sw,
+        .+01/
+u_stime,
+        .+01/
+u_waitup,
+        .+01/
+u_sin,
+        .+01/
+u_cos,
+        .+01/
+u_vp1,
+        .+01/
+u_vp2,
+        .+01/
+u_vt1,
+        .+01/
+u_vt2,
+        .+01/
+u_displist,
+        .+014/
+u_ball1,
+        .+05/
+u_ball2,
+        .+05/
+x_end,
+// by hand: 1970's list (p5.s, after ball2), the balls' records, sixteen of bvsize words,
+// which getball and putball reach through listpm1, and dump and restore write and read;
+// the translation leaves it past the program's end, here.
+        .+0120/
+
+// by hand: what the hand fixes call, and the 340's list.
+//
+// The arithmetic.
+// 1970's p computes in two's complement and the EAE's sign and magnitude; these routines
+// give the PDP-7's results, its words read as values, from values kept as the PDP-1's
+// ones' complement integers.
+// Below, |v|' is gsm's magnitude.
+// It is v when v >= 0, and -v-1 below, the ones' complement of a two's complement negative
+// (F-75, "EAE"; SIMH's pdp18b_cpu.c).
+
+// T(a, v), 1970's EAE product of a and v (gsm on v, muls by a, then llss n).
+// The EAE multiplies |a|' in MQ by |v|', the operand, to P, and complements the 36 bits
+// when a and v differ in sign; llss n leaves bits 18-n and up in AC.
+// So AC is P >> k, k = 18 - n, its low 18 bits, complemented for a negative product, and
+// read as a PDP-7 word.
+// 1970's muls by a positive constant m, the link clear, is the same with v = m.
+// Entry: AC = a, IO = v.
+// Exit: AC = T(a, v).
+// AC is the result, IO is clobbered.
+// Called via jda, at h_t12 (n 6), h_t15 (n 3) or h_t16 (n 2).
+h_t12,  0
+        dap h_tx
+        lac h_s12
+        dac h_tsh
+        lac h_t12
+        jmp h_tc
+h_t15,  0
+        dap h_tx
+        lac h_s15
+        dac h_tsh
+        lac h_t15
+        jmp h_tc
+h_t16,  0
+        dap h_tx
+        lac h_s16
+        dac h_tsh
+        lac h_t16
+h_tc,   dac h_ta
+        dio h_tv
+        xor h_tv                // the product's sign, negative when a's and v's differ
+        dac h_tng
+        lac h_ta
+        sma
+        jmp h_tc1
+        cma
+        sub u_d1
+h_tc1,  dac h_ta                // |a|'
+        lac h_tv
+        sma
+        jmp h_tc2
+        cma
+        sub u_d1
+h_tc2,  dac h_tv                // |v|'
+        lac h_ta
+        mul h_tv                // 2P over AC:IO, both factors under 2^17
+        scr 9s
+        xct h_tsh               // P >> k, its low 18 bits in IO
+        dio h_ta
+        lac h_ta
+        lio h_tng
+        spi
+        cma                     // a negative product, complemented
+        spa
+        sub u_d1                // a PDP-7 negative word, as its value here
+h_tx,   jmp .
+h_s12,  scr 4s                  // the shifts past the first 9, k + 1 in all
+h_s15,  scr 7s
+h_s16,  scr 8s
+
+// lrss n of v.
+// The PDP-7 shifts the two's complement word in from its sign, a floor; sar on a ones'
+// complement negative rounds toward zero, so a negative v is shifted as
+// -(((-v)-1) >> n) - 1.
+// Entry: AC = v.
+// Exit: AC = floor(v / 2^n).
+// AC is the result, IO is preserved.
+// Called via jda, at h_fl1, h_fl6 or h_fl8.
+h_fl1,  0
+        dap h_fx
+        lac h_r1
+        dac h_fsh
+        lac h_fl1
+        jmp h_fc
+h_fl6,  0
+        dap h_fx
+        lac h_r6
+        dac h_fsh
+        lac h_fl6
+        jmp h_fc
+h_fl8,  0
+        dap h_fx
+        lac h_r8
+        dac h_fsh
+        lac h_fl8
+h_fc,   sma
+        jmp h_fc1
+        cma
+        sub u_d1
+        xct h_fsh
+        cma
+        sub u_d1
+        jmp h_fx
+h_fc1,  xct h_fsh
+h_fx,   jmp .
+h_r1,   sar 1s
+h_r6,   sar 6s
+h_r8,   sar 8s
+
+// gsm's magnitude, |v|'.
+// Entry: AC = v.
+// Exit: AC = |v|'.
+// AC is the result, IO is preserved.
+// Called via jda.
+h_mag,  0
+        dap h_mgx
+        lac h_mag
+        sma
+        jmp h_mgx
+        cma
+        sub u_d1
+h_mgx,  jmp .
+
+// frict's EAE multiply of v by frfac, the link clear.
+// frfac, 0774000, is 2^18 - 2^11, so P >> 18 is m - ceil(m / 128) for m = |v|'.
+// With the link clear, the product's sign is v's, and a negative one is complemented.
+// Entry: AC = v.
+// Exit: AC = the new v.
+// AC is the result, IO is clobbered.
+// Called via jda.
+h_frc,  0
+        dap h_frx
+        lac h_frc
+        sma
+        jmp h_fr1
+        cma
+        sub u_d1
+h_fr1,  dac h_w2                // m
+        add h_o177
+        sar 7s                  // ceil(m / 128)
+        cma
+        add h_w2
+        lio h_frc
+        spi
+        jmp h_fr2
+        jmp h_frx
+h_fr2,  cma                     // the complement, -m'-1
+        sub u_d1
+h_frx,  jmp .
+
+// Two balls near (p1.s:220-245).
+// 1970 squared dx = x1 - x2 with muls, AC P >> 18, and went on when that was under 16,
+// which is |dx|' under 2048; then added dy's P >> 18, and went on when the sum S was under
+// 16 again, leaving after lrss 4 the S and the low word of dy's square that ballball's
+// llss 15 makes x**2+y**2 in q.
+// That is S << 11 with that word's top 11 bits.
+// Entry: ball1 and ball2 hold the two balls.
+// Exit: when they are near, q in h_q.
+// AC and IO are clobbered.
+// Called via jsp; returns to the word after the call when the balls are far apart, and
+// skips it when they are near.
+h_near, dap h_nx
+        lac u_ball1+01
+        sub u_ball2+01          // dx
+        add h_d2k
+        spa
+        jmp h_nx                // below -2048
+        sub h_d4k
+        sma
+        jmp h_nx                // 2048 or more
+        lac u_ball1+01
+        sub u_ball2+01
+        jda h_mag
+        dac h_w
+        mul h_w                 // 2P, under 2^23
+        sar 1s
+        dac h_hx                // P >> 18
+        lac u_ball1+02
+        sub u_ball2+02          // dy
+        jda h_mag
+        dac h_w
+        mul h_w
+        scr 1s                  // P, its high word in AC, its low in IO
+        add h_hx                // S
+        dac h_w
+        sub h_d16
+        sma
+        jmp h_nx                // 16 or more
+        lac h_w
+        scl 9s
+        scl 2s                  // S << 11, the low word's top 11 bits after it
+        dac h_q
+        idx h_nx
+h_nx,   jmp .
+
+// The push buttons, 1970's pbsflgs, read into h_pbs.
+// Sense switches 1 to 6 are buttons 0 to 5, held while on; and the pen on one of the nine
+// texts is held while its last hit is under 8 sixtieths old.
+// The texts are LEFT button 0, RIGHT 1, FAST LEFT 0 and 2, FAST RIGHT 1 and 2 (1970's
+// button 2 made a turn coarse), HIT 3, TAP 4, DUMP 5, RESTORE 6, EXIT 7.
+// Asks the time, as 1970's kernel read the buttons at each tick.
+// Has no arguments; sets h_pbs, h_now, and on a pen hit h_pen and h_tpen.
+// AC and IO are clobbered.
+// Called via jda.
+h_rdpb, 0
+        dap h_rpx
+        lac 4
+        and h_m6
+        ral 9s
+        ral 3s                  // switches 1 to 6 to buttons 0 to 5
+        dac h_pbs
+        cal 017                 // sys time, the low word in IO
+        dio h_now
+        lac 4
+        sma
+        jmp h_rp5               // no pen hit waiting
+        and h_m17
+        dac 4                   // taken
+        lac 5
+        sub h_ba0
+        spa
+        jmp h_rp5               // before the buttons
+        law h_btt
+        dac h_p
+        law h_bbt
+        dac h_r
+h_rp1,  lac 5
+        sub i h_p
+        spa
+        jmp h_rp2               // before this one's end, so this one
+        idx h_p
+        idx h_r
+        sad h_bbe
+        jmp h_rp5               // past the last
+        jmp h_rp1
+h_rp2,  lac i h_r
+        dac h_pen
+        lac h_now
+        dac h_tpen
+h_rp5,  lac h_tpen
+        cma
+        add h_now               // sixtieths since, +0 when equal
+        spa
+        jmp h_rpx               // the clock has wrapped
+        sub h_o7
+        sma sza
+        jmp h_rpx               // 8 sixtieths or more
+        lac h_pbs
+        ior h_pen
+        dac h_pbs
+h_rpx,  jmp .
+h_ba0,  h_bt0                   // the buttons' first word
+h_btt,  h_bt1                   // each button's end, the next one's first word
+        h_bt2
+        h_bt3
+        h_bt4
+        h_bt5
+        h_bt6
+        h_bt7
+        h_bt8
+        h_bt9
+h_bbt,  0400000                 // each button's bits, LEFT first
+        0200000                 // RIGHT
+        0500000                 // FAST LEFT
+        0300000                 // FAST RIGHT
+        0040000                 // HIT
+        0020000                 // TAP
+        0010000                 // DUMP
+        0004000                 // RESTORE
+        0002000                 // EXIT
+h_bbe,  h_bbt+011
+
+// The display.
+// The list, h_lst, is captured once.
+// It holds 1970's outline, the stick's block, the sixteen balls' blocks and the nine
+// buttons, then the halt.
+// A ball's block keeps its words' modes whatever it shows, so the 340 can run one that is
+// being rewritten.
+// The block is a parameter word into point mode, y, x into vector mode, and the circle's 64
+// vectors, the last ending them; a ball in a pocket keeps its block with the vectors
+// invisible.
+
+// The blocks built, every ball hidden (h_vis 0), at the start.
+// Has no arguments and no return values.
+// AC is clobbered, IO is preserved.
+// Called via jsp.
+h_init, dap h_inx
+        law h_blk
+        dac h_p                 // the block
+        law h_vis
+        dac h_r
+        law i 020
+        dac h_k                 // sixteen
+h_in1,  dzm i h_r
+        lac h_bw0
+        dac i h_p
+        idx h_p
+        lac h_ywd
+        dac i h_p
+        idx h_p
+        lac h_xwd
+        dac i h_p
+        law h_circ
+        dac h_w
+        law i 0100
+        dac h_w2                // sixty-four
+h_in2,  idx h_p
+        lac i h_w
+        and h_nvis              // invisible until the ball is drawn
+        dac i h_p
+        idx h_w
+        isp h_w2
+        jmp h_in2
+        idx h_p                 // the next block
+        idx h_r
+        isp h_k
+        jmp h_in1
+h_inx,  jmp .
+
+// Ball1 drawn in its block, h_bp.
+// Its center is a display unit each 64 of its coordinates, as 1970's lrss 6, held 16
+// inside the screen so that its circle, of radius 16, stays on it (a ball can pass its
+// cushion by a frame's travel, 16 units, before it bounces); the circle starts at its
+// right, x + 16, where 1970's moved before drawing.
+// Shown if it was hidden.
+// Entry: ball1, h_bp and h_vp, its word of h_vis.
+// AC is clobbered, IO is preserved.
+// Called via jsp.
+h_dbl,  dap h_dbx
+        lac h_bp
+        dac h_p
+        idx h_p                 // its y word
+        lac u_ball1+02
+        sar 6s
+        jda h_clmp
+        ior h_ywd
+        dac i h_p
+        idx h_p                 // its x word
+        lac u_ball1+01
+        sar 6s
+        jda h_clmp
+        add h_d16
+        ior h_xwd
+        dac i h_p
+        lac i h_vp
+        sza
+        jmp h_dbx
+        jsp h_show
+h_dbx,  jmp .
+
+// A coordinate held from 16 to 1007.
+// Entry: AC = the coordinate.
+// Exit: AC = it, held.
+// AC is the result, IO is preserved.
+// Called via jda.
+h_clmp, 0
+        dap h_cmx
+        lac h_clmp
+        sub h_d16
+        sma
+        jmp h_cm1
+        lac h_d16               // under 16
+        jmp h_cmx
+h_cm1,  lac h_clmp
+        sub h_d1007
+        sma sza
+        jmp h_cm2
+        lac h_clmp              // within
+        jmp h_cmx
+h_cm2,  lac h_d1007             // over 1007
+h_cmx,  jmp .
+
+// A ball in a pocket is not drawn (p1.s:98-100).
+// Its block is hidden if it was shown, then on to 1970's 4f.
+// Reached by jmp; AC is clobbered, IO is preserved.
+h_pkt,  lac i h_vp
+        sza
+        jsp h_hide
+        jmp w_10327
+
+// The ball's circle shown or hidden.
+// The visible bit of its block's 64 vectors is set or cleared, and its word of h_vis with
+// it.
+// Entry: h_bp, the block, and h_vp, its word of h_vis.
+// AC is clobbered, IO is preserved.
+// Called via jsp, at h_show or h_hide.
+h_show, dap h_shx
+        lac h_vbit
+        jmp h_sh0
+h_hide, dap h_shx
+        cla
+h_sh0,  dac h_w2
+        dac i h_vp
+        lac h_bp
+        add h_d3
+        dac h_p                 // its first vector
+        law i 0100
+        dac h_k
+h_sh1,  lac i h_p
+        and h_nvis
+        ior h_w2
+        dac i h_p
+        idx h_p
+        isp h_k
+        jmp h_sh1
+h_shx,  jmp .
+
+// The stick (p4.s:8-37).
+// It runs from the cue ball's center, 1970's qcos and qsin each lrss 8, cut where it would
+// leave the screen (h_clp, y then x), in four visible vectors, three of a quarter and the
+// rest, each within the 340's 127.
+// Marked drawn for h_eof.
+// Entry: ball1, qcos and qsin.
+// AC and IO are clobbered.
+// Called via jsp.
+h_dstk, dap h_dsx
+        dac h_skn               // drawn, since AC is the return, not 0
+        lac u_ball1+01
+        sar 6s
+        dac h_sx
+        lac u_ball1+02
+        sar 6s
+        dac h_sy
+        lac u_qcos
+        jda h_fl8
+        dac h_sdx
+        lac u_qsin
+        jda h_fl8
+        dac h_sdy
+        lac h_sy                // cut in y
+        dac h_cs
+        lac h_sdy
+        dac h_cd
+        lac h_sdx
+        dac h_ce
+        jsp h_clp
+        lac h_cd
+        dac h_sdy
+        lac h_ce
+        dac h_sdx
+        lac h_sx                // and in x
+        dac h_cs
+        lac h_sdx
+        dac h_cd
+        lac h_sdy
+        dac h_ce
+        jsp h_clp
+        lac h_cd
+        dac h_sdx
+        lac h_ce
+        dac h_sdy
+        lac h_sy                // its start
+        ior h_ywd
+        dac h_sky
+        lac h_sx
+        ior h_xwd
+        dac h_skx
+        lac h_sdx               // a quarter, three times
+        sar 2s
+        dac h_w
+        lac h_sdy
+        sar 2s
+        dac h_w2
+        jsp h_vec
+        dac h_sk1
+        dac h_sk2
+        dac h_sk3
+        lac h_w                 // and the rest, less three quarters
+        add h_w
+        add h_w
+        cma
+        add h_sdx
+        dac h_w
+        lac h_w2
+        add h_w2
+        add h_w2
+        cma
+        add h_sdy
+        dac h_w2
+        jsp h_vec
+        ior u_o400000           // the last ends them
+        dac h_sk4
+h_dsx,  jmp .
+
+// The stick cut at the screen's edge in one axis.
+// It runs from h_cs, h_cd long in that axis and h_ce in the other; a length that would
+// pass 0 or 1023 becomes the one that reaches it, and h_ce is scaled with it
+// (h_ce f / h_cd, truncated).
+// Entry: h_cs, h_cd and h_ce.
+// Exit: h_cd and h_ce, cut.
+// AC and IO are clobbered.
+// Called via jsp.
+h_clp,  dap h_clq
+        lac h_cs
+        add h_cd                // the end
+        sma
+        jmp h_cp2
+        lac h_cs                // below 0, the length to 0
+        cma
+        jmp h_cp4
+h_cp2,  sub h_d1023
+        sma sza
+        jmp h_cp3
+        jmp h_clq               // within
+h_cp3,  lac h_d1023             // past 1023, the length to it
+        sub h_cs
+h_cp4,  dac h_w
+        lac h_ce
+        mul h_w
+        div h_cd
+        jmp h_clq               // never, the quotient being no larger than h_ce
+        dac h_ce
+        lac h_w
+        dac h_cd
+h_clq,  jmp .
+
+// A visible 340 vector of h_w in x and h_w2 in y, each from -127 to 127.
+// Entry: h_w and h_w2.
+// Exit: AC = the vector word.
+// AC is the result, IO is preserved.
+// Called via jsp.
+h_vec,  dap h_vcx
+        lac h_w
+        sma
+        jmp h_vc1
+        cma
+        ior h_left
+h_vc1,  dac h_r
+        lac h_w2
+        sma
+        jmp h_vc2
+        cma
+        ral 8s
+        ior h_down
+        jmp h_vc3
+h_vc2,  ral 8s
+h_vc3,  ior h_r
+        ior h_vbit
+h_vcx,  jmp .
+
+// The frame's end.
+// The stick is hidden, its vectors invisible and of no length, when stickcont did not
+// draw it (p1.s:258-259).
+// Has no arguments and no return values.
+// AC is clobbered, IO is preserved.
+// Called via jsp.
+h_eof,  dap h_efx
+        lac h_skn
+        sza
+        jmp h_efx
+        dzm h_sk1
+        dzm h_sk2
+        dzm h_sk3
+        lac u_o400000
+        dac h_sk4
+h_efx,  jmp .
+
+h_b16,  0200000                 // 2^16
+h_bs,   0103                    // a ball's block, 3 words and 64 vectors
+h_d3,   3
+h_d16,  020
+h_d1007,01757
+h_d1023,01777
+h_d2k,  04000
+h_d4k,  010000
+h_o177, 0177
+h_m6,   077                     // sense switches 1 to 6, in word 4
+h_m17,  0377777
+h_o7,   7
+h_vbit, visible
+h_nvis, 0577777                 // all but visible
+h_left, left
+h_down, down
+h_bw0,  parameter next(point)   // a block's first three words
+h_ywd,  y(0) next(point)
+h_xwd,  x(0) next(vector)
+// h_vis, each ball's block shown, not 0, or hidden
+h_vis,
+        .+020/
+
+// The circle, 1970's (p5.s's circle, its short vectors of one or two units, after the
+// first, a move to the right of 16), each a 340 vector, the last ending them.
+h_circ,
+        right deltax(0) up deltay(2) visible
+        right deltax(0) up deltay(2) visible
+        left deltax(1) up deltay(1) visible
+        right deltax(0) up deltay(2) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(1) up deltay(1) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(2) up deltay(0) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        left deltax(1) down deltay(1) visible
+        right deltax(0) down deltay(2) visible
+        left deltax(1) down deltay(1) visible
+        right deltax(0) down deltay(2) visible
+        right deltax(0) down deltay(2) visible
+        right deltax(0) down deltay(2) visible
+        right deltax(0) down deltay(2) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(0) down deltay(2) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(1) down deltay(1) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(2) up deltay(0) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(0) up deltay(2) visible
+        right deltax(1) up deltay(1) visible
+        right deltax(0) up deltay(2) visible
+        right deltax(0) up deltay(2) visible end
+
+// The list.
+h_lst,  parameter scale(0) intensity(7) lpoff next(point)
+// The outline, 1970's (p5.s's outline, from x 256, y 4).
+// It is the rails where the balls' edges stop, x 260 and 763, y 8 and 1015, cut at the
+// corners and notched at the sides for the pockets; its long sides are in vectors of at
+// most 127.
+        y(4) next(point)
+        x(0d256) next(vector)
+        right deltax(4) up deltay(0d12) visible
+        up deltay(0d127) visible
+        up deltay(0d127) visible
+        up deltay(0d127) visible
+        up deltay(0d107) visible
+        left deltax(0d8) up deltay(0d8) visible
+        right deltax(0d8) up deltay(0d8) visible
+        up deltay(0d127) visible
+        up deltay(0d127) visible
+        up deltay(0d127) visible
+        up deltay(0d106) visible
+        left deltax(4) up deltay(0d12) visible
+        right deltax(0d12) down deltay(4) visible
+        right deltax(0d127) visible
+        right deltax(0d127) visible
+        right deltax(0d127) visible
+        right deltax(0d106) visible
+        right deltax(0d12) up deltay(4) visible
+        left deltax(4) down deltay(0d12) visible
+        down deltay(0d127) visible
+        down deltay(0d127) visible
+        down deltay(0d127) visible
+        down deltay(0d106) visible
+        right deltax(0d8) down deltay(0d8) visible
+        left deltax(0d8) down deltay(0d8) visible
+        down deltay(0d127) visible
+        down deltay(0d127) visible
+        down deltay(0d127) visible
+        down deltay(0d107) visible
+        right deltax(4) down deltay(0d12) visible
+        left deltax(0d12) up deltay(4) visible
+        left deltax(0d127) visible
+        left deltax(0d127) visible
+        left deltax(0d127) visible
+        left deltax(0d106) visible
+        left deltax(0d12) down deltay(4) visible end
+// The stick, its start, then four vectors, hidden by h_eof.
+h_stk,  parameter next(point)
+h_sky,  y(0) next(point)
+h_skx,  x(0) next(vector)
+h_sk1,  0
+h_sk2,  0
+h_sk3,  0
+h_sk4,  end
+// The balls' blocks, built by h_init.
+h_blk,
+        .+02060/
+// The buttons, pen-sensitive texts in a column to the right of the table.
+// h_rdpb finds a hit by the word's address.
+        parameter scale(1) intensity(5) next(parameter)
+h_bt0,  parameter lpon next(point)
+        y(0d920) next(point)
+        x(0d800) next(character)
+        type340 "LEFT"
+h_bt1,  parameter lpon next(point)
+        y(0d850) next(point)
+        x(0d800) next(character)
+        type340 "RIGHT"
+h_bt2,  parameter lpon next(point)
+        y(0d780) next(point)
+        x(0d800) next(character)
+        type340 "FAST LEFT"
+h_bt3,  parameter lpon next(point)
+        y(0d710) next(point)
+        x(0d800) next(character)
+        type340 "FAST RIGHT"
+h_bt4,  parameter lpon next(point)
+        y(0d640) next(point)
+        x(0d800) next(character)
+        type340 "HIT"
+h_bt5,  parameter lpon next(point)
+        y(0d570) next(point)
+        x(0d800) next(character)
+        type340 "TAP"
+h_bt6,  parameter lpon next(point)
+        y(0d500) next(point)
+        x(0d800) next(character)
+        type340 "DUMP"
+h_bt7,  parameter lpon next(point)
+        y(0d430) next(point)
+        x(0d800) next(character)
+        type340 "RESTORE"
+h_bt8,  parameter lpon next(point)
+        y(0d360) next(point)
+        x(0d800) next(character)
+        type340 "EXIT"
+h_bt9,  parameter lpoff halt
+0110/
+r_frict,jmp 0
+r_ballball,jmp 0
+r_dump, jmp 0
+r_restore,jmp 0
+r_ballinit,jmp 0
+r_put,  jmp 0
+r_getball,jmp 0
+r_putball,jmp 0
+r_stickcon,jmp 0
+r_rotate,jmp 0
+r_pocketlr,jmp 0
+r_pockettb,jmp 0
+        constants
+start 020000

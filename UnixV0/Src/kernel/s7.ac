@@ -1,0 +1,400 @@
+// The kernel's seventh part, after 1970's s7.s, with the sequence break
+// routine, the clock, the terminals' side of DCS2, and the break to the
+// kernel.
+// Bank 0.
+// Needs unix.ah and chrono.ac.
+
+// A sequence break, from 0:3.
+// The break system is SBS256's one channel, with its frame at 0:0-2 (AC,
+// the PC word with the window and the overflow flag, IO), and no break can
+// enter the routine before its jmp i 1.
+// The routine serves these, in order.
+// 1. The clock.
+//    Whatever broke, the BBN clock's counter is read, and the milliseconds
+//    since the last break are added to the time, three sixtieths for each
+//    50, and to the ticks, one for each 32, each tick also spending the
+//    running process's quantum (uquant).
+//    The clock's 32 ms break sees that this happens at least that often.
+//    The drum's end of transfer needs nothing more, since dskio polls the
+//    busy bit.
+// 2. DCS2.
+//    When ric names a channel, every terminal's channel is polled (tpoll),
+//    since ric names only one of those that broke.
+//    Each channel breaks on characters, on room again in a full transmit
+//    buffer and on the connection made or lost (Docs/UsingDCS2.md, the
+//    request block's r and C bits), and holds what happens while its break
+//    is served until its rci, so no poll is needed at the ticks.
+//    A poll there would cost about 230 drum words a tick, more than the
+//    interleave has.
+// 3. The 340, while a process holds it (dybrk, in dsp.ac).
+//    It takes pen hits, stops, the sense switches and the restart at each
+//    tick.
+//    With none captured the step is two words, since every drum transfer
+//    pays for it.
+// 4. The break to the kernel (kbrk, in s1.ac).
+//    When the running process has spent its quantum (if PREEMPT) or an
+//    interrupt key has marked its standard input, and the break came from
+//    its bank, outside its frame, with the window closed, its AC, IO, PC
+//    and overflow flag go to userdata and 0:1 is rewritten to resume at
+//    kbrk, window open.
+// The window is opened for bank 1's rings and closed before the jmp i 1,
+// which restores it from 0:1 with the flag.
+// The routine shares with the code it breaks only the words that code
+// changes with breaks off (lsm ... esm), which are the time, the terminals'
+// words, the process table's status words, the sleep words, and intAny.
+// DCS2's IOTs and status bits are described in Docs/UsingDCS2.md.
+// Reached by the jmp at 0:3, and returns by jmp i 1.
+brk,    eem
+        cli
+        rck                 // IO = the counter, 0 to 59999 ms
+        dio bkNow
+        lac bkNow
+        sub ckLast
+        spa                 // skip unless the counter wrapped since
+        add [CLKWRAP]
+        dac bkD             // the milliseconds since the last break
+        lac bkNow
+        dac ckLast
+        idx nBrk
+// the time
+        lac ckMs
+        add bkD
+        dac ckMs
+        dzm bkN
+bk1,    lac ckMs
+        sub [MS3]
+        spa                 // skip if 50 ms or more are left
+        jmp bk2
+        dac ckMs
+        lac bkN
+        add [3]
+        dac bkN
+        jmp bk1
+bk2,    lac bkN
+        jda tmadd
+// the ticks
+        lac tkMs
+        add bkD
+        dac tkMs
+bk3,    lac tkMs
+        sub [TICKMS]
+        spa                 // skip if 32 ms or more are left
+        jmp bk4
+        dac tkMs
+        idx nTick
+        idx uquant
+        jmp bk3
+// DCS2
+bk4,    ric
+        dio bkC
+        lac bkC
+        sad [0100]          // skip if a channel broke
+        jmp bk7
+        dzm bkK
+bk6,    lac bkK
+        jda tpoll
+        idx bkK
+        sas [NTERM]
+        jmp bk6
+// the 340
+bk7,    lac dyBnk
+        sza                 // skip unless a list is captured
+        jda dybrk
+// the break to the kernel
+#if PREEMPT
+        lac uquant
+        sub [QUANT]
+        sma                 // skip if the quantum is not spent
+        jmp bk9
+#endif
+        lac intAny
+        sza i               // skip if a terminal is marked
+        jmp bkR
+        law i NTERM
+        dac bkN
+        lac [tInt]
+        dac bkP
+bk8,    lac i bkP
+        sza i               // skip if this terminal is marked
+        jmp bk8a
+        sad uOfiles+2
+        jmp bk9             // the process's standard input
+bk8a,   idx bkP
+        isp bkN
+        jmp bk8
+        jmp bkR
+bk9,    lac 1
+        and [BANKBITS]
+        sas uBank           // skip if from the running process's bank
+        jmp bkR
+        lac 1
+        and [0200000]
+        sza                 // skip if the window was closed
+        jmp bkR
+        lac 1
+        and [07770]
+        sad [FRAME]         // skip unless in the frame, 0100-0107
+        jmp bkR
+        lac 0
+        dac uAc
+        lac 2
+        dac uMq
+        lac 1
+        and [07777]
+        dac uPc
+        lac 1
+        and [0400000]
+        dac uOv
+        lac [0200000+kbrk]
+        dac 1
+bkR,    lem
+        lio 2
+        lac 0
+        jmp i 1
+
+// Serve one terminal's DCS2 channel, by its status (rcs).
+// - The connection.
+//   A new caller clears the end of file and any interrupt mark and empties
+//   the input ring.
+//   A hang-up sets the end of file and empties the ring.
+//   Either wakes the terminal's readers and writers.
+// - Characters waiting.
+//   They are read with rch, which is when DCS2 echoes them.
+//   ESC and ctrl-C empty the ring, mark the terminal with its input's
+//   i-number (tInt, for chkint) and wake its readers and writers, as 1970's
+//   intrp1 did (s7.s:340-360).
+//   The rest go into the ring, 7 bits, and wake its readers.
+//   They are dropped when the ring is full, as 1970 dropped them with no
+//   queue element free (s7.s:123-126).
+// - Room again in the transmit buffer wakes its writers.
+// - rci re-arms the channel's break last, as Docs/UsingDCS2.md asks.
+// Break routine only, or the cold start with breaks still off.
+// Entry: AC = the terminal, which is also its channel.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+tpoll,  0
+        dap tpX
+        lac tpoll
+        dac tpK
+        lio tpK
+        rcs
+        dio tpS
+        lac tpS
+        and [dsfopn]
+        sza i               // skip if the channel is open
+        jmp tpX
+// the connection
+        lac tpK
+        add [tCon]
+        dac tpP
+        lac tpK
+        add [tEof]
+        dac tpQ
+        lac tpS
+        and [dsfcon]
+        sza i               // skip if connected
+        jmp tp1
+        lac i tpP
+        sza                 // skip if a new caller
+        jmp tp3
+        law 1
+        dac i tpP
+        dzm i tpQ
+        lac tpK             // and no interrupt left from the last one
+        add [tInt]
+        dac tpP
+        lac i tpP
+        sza i               // skip if marked
+        jmp tp2
+        dzm i tpP
+        lac intAny
+        sub [1]
+        dac intAny
+        jmp tp2
+tp1,    lac i tpP
+        sza i               // skip if the caller has hung up
+        jmp tp3
+        dzm i tpP
+        law 1
+        dac i tpQ
+tp2,    jda tdrain
+        jda twake
+// characters
+tp3,    lac tpS
+        and [dsfrdy]
+        sza i               // skip if characters are waiting
+        jmp tp6
+        dzm tpW
+        lio tpK
+        roc
+tp4,    rch rchclr
+        dio tpC
+        lac tpC
+        spa                 // skip if a character came
+        jmp tp5
+        and [0177]
+        dac tpC
+        sad [CHESC]
+        jmp tpI
+        sad [CHETX]
+        jmp tpI
+        lac tpK
+        add [tCnt]
+        dac tpP
+        lac i tpP
+        sub [QLEN]
+        sma                 // skip if the ring has room
+        jmp tp4
+        lac i tpP
+        add [1]
+        dac i tpP
+        lac tpK
+        add [tIn]
+        dac tpP
+        lac i tpP
+        dac tpN
+        add [1]
+        and [QMASK]
+        dac i tpP
+        lac tpK
+        ral 6s              // QLEN words a terminal
+        add [TQBASE]
+        add tpN
+        dac tpP
+        lac tpC
+        dac i tpP
+        law 1
+        dac tpW
+        jmp tp4
+tpI,    jda tdrain          // an interrupt key
+        lac tpK
+        add [tInt]
+        dac tpP
+        lac i tpP
+        sza                 // skip unless marked already
+        jmp tpI1
+        idx intAny
+        lac tpK
+        add [tIno]
+        dac tpQ
+        lac i tpQ
+        dac i tpP
+tpI1,   jda twake
+        jmp tp4
+tp5,    rsc
+        lac tpW
+        sza i               // skip if a character went into the ring
+        jmp tp6
+        lac tpK
+        add [tRsl]
+        dac tpP
+        lac i tpP
+        jda wakeup
+        dac i tpP
+// room again for a writer
+tp6,    lac tpK
+        add [tWsl]
+        dac tpP
+        lac i tpP
+        sza i               // skip if a writer sleeps
+        jmp tp7
+        lac tpS
+        and [dsfful]
+        sza                 // skip if there is room
+        jmp tp7
+        lac tpS
+        and [dsfcon]
+        sza i               // skip if connected, else it waits for a caller
+        jmp tp7
+        lac i tpP
+        jda wakeup
+        dac i tpP
+tp7,    lac tpS
+        and [dsfior+dsfioc+dsfioe]
+        sza i               // skip if the channel broke
+        jmp tpX
+        lio tpK
+        rci
+tpX,    jmp .
+
+// Empty terminal tpK's input ring.
+// Break routine only.
+// Exit: AC is clobbered, IO is preserved.
+// Called by jda.
+tdrain, 0
+        dap tdX
+        lac tpK
+        add [tCnt]
+        dac tdP
+        dzm i tdP
+        lac tpK
+        add [tIn]
+        dac tdP
+        lac i tdP
+        dac tdN
+        lac tpK
+        add [tOut]
+        dac tdP
+        lac tdN
+        dac i tdP
+tdX,    jmp .
+
+// Wake terminal tpK's readers and writers.
+// Break routine only.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+twake,  0
+        dap twkX
+        lac tpK
+        add [tRsl]
+        dac tdP
+        lac i tdP
+        jda wakeup
+        dac i tdP
+        lac tpK
+        add [tWsl]
+        dac tdP
+        lac i tdP
+        jda wakeup
+        dac i tdP
+twkX,   jmp .
+
+// Wake the processes asleep on a sleep word, after 1970's wakeup
+// (s7.s:265-293).
+// Each slot whose bit is set, and which is not ready, is made ready.
+// Bit 0, 1970's busy flag, is not used.
+// Break routine only.
+// Entry: AC = the sleep word.
+// Exit: AC = 0, the word's new value.
+// IO is clobbered.
+// Called by jda.
+wakeup, 0
+        dap wkX
+        lac wakeup
+        and [0377777]
+        sza i               // skip if any slot sleeps on it
+        jmp wkX
+        dac wkW
+        lac [ulist]
+        dac wkP
+        law i NPROC
+        dac wkN
+wk1,    lac wkW
+        ral 1s              // the next slot's bit into the sign
+        dac wkW
+        sma                 // skip if it is set
+        jmp wk2
+        lac i wkP
+        and [PSTAT]
+        sas [PNREADY]       // skip if not ready
+        jmp wk2
+        lac i wkP
+        sub [PNREADY-PREADY]
+        dac i wkP
+wk2,    lac wkP
+        add [PENT]
+        dac wkP
+        isp wkN
+        jmp wk1
+        cla
+wkX,    jmp .

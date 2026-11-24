@@ -10,7 +10,7 @@ It expects to find /opt/pidp1-mods already installed, see wjenh/pidp1-mods.
 It also includes a prebuilt Unix filesystem and boot program so you
 don't actually need to build anything.
 
-Just:\
+In V0, just:\
 Copy unix.drum to /opt/pidp1-mods/pdp23drum or use the *pdp1central* program to manage it.\
 Start the pidp1 emulator.\
 Load boot.rim as usual.\

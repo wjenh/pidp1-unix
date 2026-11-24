@@ -1,0 +1,142 @@
+// as1gr.ac holds what the memory references' and the data's generators,
+// as1g.am1 and as1d.am1, share.
+// That is a data reference's operand, the test of a word as one that stays
+// one word, and the check of a difference's span.
+// See as1c.ac.
+
+// The operand of a data reference from word k to word i, in oadr, ob and
+// oc.
+// It goes through k's base when i is not a word that stays one word and the
+// base is.
+// translate.c's dataRef.
+// Entry: AC = i.
+// AC and IO are clobbered.
+// Called via jda.
+dref,   0
+        dap drefx
+        lac dref
+        dac dra
+        jda isone
+        sza
+        jmp dr1
+        lio [0]
+        lac k
+        jda getr
+        sza i
+        jmp dr1                     // k not stored
+        and [RBASE]
+        sza i
+        jmp dr1
+        lio [2]
+        lac k
+        jda getr
+        and [07777]
+        dac drb
+        sad dra
+        jmp dr1
+        lac drb
+        jda isone
+        sza i
+        jmp dr1
+        lac drb
+        ior [TBASE]
+        dac ob
+        dzm oadr
+        lac dra
+        sub drb
+        dac oc                      // signed, since the output adds it
+        jmp drefx
+dr1,
+        lac dra
+        jda mapa
+drefx,  jmp .
+
+// 1 when word i of the program stays one PDP-1 word.
+// Such a word is a reserved word, an argument, or a data word not an entry.
+// Entry: AC = i.
+// Exit: AC = 1 or 0.
+// IO is preserved.
+// Called via jda.
+isone,  0
+        dap isonex
+        lac isone
+        spa
+        jmp is0
+        sub nk
+        sma
+        jmp is0
+        lac isone
+        jda getf
+        dac isf
+        and [KMASK]
+        sza i
+        jmp is1
+        sad [KARG]
+        jmp is1
+        sas [KDATA]
+        jmp is0
+        lac isf
+        and [FENT]
+        sza
+        jmp is0
+is1,
+        lac [1]
+        jmp isonex
+is0,
+        cla
+isonex, jmp .
+
+// Reports an error when word k's record holds a difference of two places
+// whose span holds code.
+// Entry: AC = k.
+// AC and IO are clobbered.
+// Called via jda.
+cspan,  0
+        dap cspanx
+        lio [0]
+        lac cspan
+        jda getr
+        and [RSPAN]
+        sza i
+        jmp cspanx
+        lio [3]
+        lac cspan
+        jda getr
+        dac csw3
+        and [07777]
+        dac cslo
+        lio [2]
+        lac cspan
+        jda getr
+        sar 6s
+        and [07700]
+        dac cshi
+        lac csw3
+        sar 9s
+        sar 3s
+        and [077]
+        ior cshi
+        dac cshi
+cs1,
+        lac cslo
+        sub cshi
+        sma
+        jmp cspanx
+        lac cslo
+        jda kind
+        sad [KCODE]
+        jmp cs2
+        idx cslo
+        jmp cs1
+cs2,
+        lac cspan
+        lio [M_SPAN]
+        jda report
+cspanx, jmp .
+
+dra,    0
+drb,    0
+isf,    0
+csw3,   0
+cslo,   0
+cshi,   0

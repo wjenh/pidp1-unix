@@ -1,0 +1,196 @@
+// The time's arithmetic, for s7.ac's break routine and s8.ac's cold start.
+// It makes the Chrono-Log's reading into the sixtieths of a second since
+// the start of its year, and adds a count to that time.
+// Bank 0.
+// Needs sTim, two words, the time high word first and its low word
+// unsigned, as 1970's s.tim.
+
+// Set sTim to the sixtieths since 1 January of the Chrono-Log's year.
+// Entry: AC = hours, minutes and seconds; IO = month, day and year since
+//        2000, as IOT 70 gives them (Docs/UsingTheChronologClock.md).
+// Exit: sTim set, or 0 for a month outside 1 to 12 or a day of 0.
+// AC and IO are clobbered.
+// Called by jda.
+// The seconds come to at most 31,622,399, past an 18-bit word, so they are
+// carried as a high and a low word of 17 bits, which mul gives directly.
+// Before its scr, AC is the product's high 17 bits and IO its low 17 bits
+// shifted left one.
+tmset,  0
+        dap tsX
+        dio tsMdy
+// the seconds of the day, hours x 3600 + minutes x 60 + seconds, which fits
+        lac tmset
+        rar 9s
+        rar 4s
+        and [037]
+        mul [0d3600]
+        scr 1s
+        lai
+        dac tsSod
+        lac tmset
+        rar 6s
+        and [077]
+        mul [0d60]
+        scr 1s
+        lai
+        add tsSod
+        dac tsSod
+        lac tmset
+        and [077]
+        add tsSod
+        dac tsSod
+// the month, 1 to 12, and the day, from 1
+        lac tsMdy
+        rar 9s
+        rar 5s
+        and [017]
+        dac tsMon
+        sub [1]
+        spa                 // skip if 1 or more
+        jmp tsBad
+        sub [0d12]
+        sma                 // skip if 12 or less
+        jmp tsBad
+        lac tsMdy
+        rar 9s
+        and [037]
+        sza i               // skip if not 0
+        jmp tsBad
+        sub [1]
+        dac tsDay
+// a leap year's day after February, the year being a multiple of 4, and of
+// 400 if of 100 (2000 and 2400 leap, 2100 not)
+        dzm tsLeap
+        lac tsMon
+        sub [3]
+        spa                 // skip if March or later
+        jmp ts2
+        lac tsMdy
+        and [0777]
+        dac tsYr
+        and [3]
+        sza                 // skip if a multiple of 4
+        jmp ts2
+        lac tsYr
+        lia
+        cla
+        scl 1s
+        div [0d100]
+        jmp tsBad           // not taken, since the year is under 512
+        dio tsT             // the remainder
+        lac tsT
+        sza                 // skip if a multiple of 100
+        jmp ts1
+        lac tsYr
+        lia
+        cla
+        scl 1s
+        div [0d400]
+        jmp tsBad
+        dio tsT
+        lac tsT
+        sza                 // skip if a multiple of 400
+        jmp ts2
+ts1,    law 1
+        dac tsLeap
+// the days before this one in the year, then the seconds
+ts2,    lac tsMon
+        add [tsCum-1]
+        dac tsT
+        lac i tsT
+        add tsDay
+        add tsLeap
+        mul [0d86400]
+        dac tsHi            // the product's high 17 bits
+        lai
+        rar 1s
+        and [0377777]       // its low 17 bits
+        add tsSod           // at most 0377777 + 86399, so the bits are exact
+        sma                 // skip if it carried into bit 0
+        jmp ts3
+        and [0377777]
+        dac tsLo
+        idx tsHi            // which loads AC
+        lac tsLo
+ts3,    dac tsLo
+// the sixtieths, high x 60 x 2^17 + low x 60
+        mul [0d60]
+        dac tsT             // low x 60's high 17 bits
+        lai
+        rar 1s
+        and [0377777]
+        dac tsLo
+        lac tsHi
+        mul [0d60]
+        scr 1s
+        lai                 // high x 60, under 15,000
+        add tsT
+        dac tsHi
+// as 1970's two words, the high word, then the low 18 bits
+        and [1]
+        rar 1s              // bit 17 to bit 0
+        ior tsLo
+        dac sTim+1
+        lac tsHi
+        sar 1s
+        dac sTim
+tsX,    jmp .
+tsBad,  dzm sTim
+        dzm sTim+1
+        jmp tsX
+
+// The days before the first of each month, in a year that is not leap.
+tsCum,  0d0
+        0d31
+        0d59
+        0d90
+        0d120
+        0d151
+        0d181
+        0d212
+        0d243
+        0d273
+        0d304
+        0d334
+tsCumE,
+assert tsCumE-tsCum == 0d12
+
+// Add a count to the time sTim.
+// Ones' complement adds the bits exactly for a true sum of 0 to 0777776, so
+// the low word is added to directly only while its sign bit is clear.
+// When it is set, its complement (0777777 less it, a positive number) has
+// the count taken from it, and the sign of that difference is the carry.
+// Entry: AC = the count, 0 to 0377777.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+tmadd,  0
+        dap taX
+        lac sTim+1
+        sma                 // skip if its sign bit is set
+        jmp ta1
+        cma                 // 0777777 less the low word
+        sub tmadd
+        spa                 // skip if no carry, the sum being 0777777 or less
+        jmp ta2
+        cma                 // the sum
+        dac sTim+1
+        jmp taX
+ta1,    add tmadd           // at most 0377777 + 0377777
+        dac sTim+1
+        jmp taX
+ta2,    cma                 // the count less 0777777 less the low word, 1 or more
+        sub [1]             // the sum less 2^18
+        dac sTim+1
+        idx sTim
+taX,    jmp .
+
+// tmset's words.
+tsMdy,  0
+tsSod,  0
+tsMon,  0
+tsDay,  0
+tsYr,   0
+tsLeap, 0
+tsT,    0
+tsHi,   0
+tsLo,   0

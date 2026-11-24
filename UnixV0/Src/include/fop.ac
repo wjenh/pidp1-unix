@@ -1,0 +1,1407 @@
+// fop.ac, the floating point package of 1970's Space Travel and psych (src/cmd/fop.s in
+// the pdp7-unix repository), rewritten for the PDP-1 with its interface kept.
+//
+// A number is three words.
+// They are the exponent, a ones' complement integer; the high word, the sign in bit 0 and
+// the top 17 bits of the magnitude; the low word, its next 18 bits.
+// The value is 0.m * 2^exp, normal when the high word's 0200000 bit is set.
+// The floating accumulator is u_aexp, u_ams, u_ans, as fop.s named it, and programs read
+// and change u_aexp directly.
+//
+// Each routine is called as the translator calls fop.s's.
+// 1970's call of fld with the operand's address in the next word becomes a jda u_fld
+// followed by that word.
+// The routine's first word takes AC, and its return word r_<name> steps past the operand.
+// fld, fst, fng, fix, flt, fno, fcp, fad, fmp, sfmp and sfdv give fop.s's results bit for
+// bit, its truncations and its quirks included; fdv and sqrt, whose PDP-7 code rests on an
+// 18-bit unsigned divide the PDP-1 lacks, are within a few units of the 35th bit of the
+// exact result; sin is fop.s's series over them; sfad keeps 17 bits.
+//
+// The words are named f_ and the routines' entries u_ and r_, clear of the translator's
+// names.
+// There are no literals, since the translation counts its own ahead of the program
+// (Tools/as7am1/README.md), so this file keeps its constants in words of its own.
+// Each routine's header says which of AC and IO it preserves.
+//
+// A program that calls none of sfad, sin or fno may define FOP_NOSFAD, FOP_NOSIN and
+// FOP_NOFNO before the #include to leave them out (Space Travel, for its display list's
+// room); with none defined the file is the whole package.
+// FOP_TSIN gives sin from a table in place of fop.s's series, about 40 times faster and
+// within 2e-5 (psych, for its speed); fsintab.ac is its table.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+
+// The accumulator and the operand, as fop.s names them.
+u_aexp, 0
+u_ams,  0
+u_ans,  0
+u_hexp, 0
+u_hms,  0
+u_hls,  0
+u_rsign, 0
+u_asign, 0
+u_tmp,  0
+
+f_one,  1
+f_three, 3
+f_d8,   10
+f_d9,   11
+f_d17,  21
+f_d34,  42
+f_sgn,  0400000
+f_m17,  0377777
+f_b1,   0200000
+f_b2,   0100000
+f_hi9,  0377000
+f_mz,   0777777
+f_mone, 0777776
+f_tscra, f_tscr
+f_tsc9, f_tscr+11               // f_tscr + 9, as fad adds d - 8, for f_tscr + d + 1
+
+f_t,    0
+f_u,    0
+f_x,    0
+f_k,    0
+f_kk,   0
+f_s,    0
+f_d,    0
+f_flip, 0
+f_ah,   0
+f_al,   0
+f_hh,   0
+f_hl,   0
+f_sh,   0
+f_sl,   0
+f_ta,   0
+f_th,   0
+f_ma,   0
+f_mh,   0
+f_x0,   0
+f_y0,   0
+f_p1,   0
+f_p2,   0
+f_l0,   0
+f_l1,   0
+f_l2,   0
+f_q1,   0
+f_q2,   0
+f_q3,   0
+f_e,    0
+f_t0,   0
+f_t1,   0
+f_a,    0
+
+// Adds the word w, below 2^17, to the 17-bit digit lo, carrying into the next digit hi.
+#define F_ADDC(lo, hi, w) lac lo; add w; sma; jmp .+5; and f_m17; dac lo; idx hi; jmp .+2; dac lo
+
+// f_garg, fop.s's garg.
+// It sets hexp, hms (its magnitude) and hls from the operand; rsign the exclusive or of
+// the two signs, asign the accumulator's sign, ams its magnitude.
+// Entry: AC = the operand's address.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+f_garg, 0
+        dap f_gx
+        lac f_garg
+        dap f_g0
+        add f_one
+        dap f_g1
+        add f_one
+        dap f_g2
+f_g0,   lac .
+        dac u_hexp
+f_g1,   lac .
+        dac f_t
+        and f_m17
+        dac u_hms
+f_g2,   lac .
+        dac u_hls
+        lac f_t
+        xor u_ams
+        and f_sgn
+        dac u_rsign
+        lac u_ams
+        and f_sgn
+        dac u_asign
+        xor u_ams
+        dac u_ams
+f_gx,   jmp .
+
+// f_srk, AC:IO shifted right f_k places (0 to 35) by scr, AC's sign filling.
+// Entry: f_x = the high word, IO = the low word, f_k = the places.
+// Exit: AC:IO = the shifted pair.
+// AC and IO are both results.
+// Called via jsp.
+f_srk,  dap f_srx
+        lac f_k
+        dac f_kk
+f_sr1,  lac f_kk
+        sub f_d9
+        spa
+        jmp f_sr2
+        dac f_kk
+        lac f_x
+        scr 9s
+        dac f_x
+        jmp f_sr1
+f_sr2,  lac f_kk
+        add f_tscra
+        dap f_sr3
+        lac f_x
+f_sr3,  xct .
+f_srx,  jmp .
+f_tscr, nop
+        scr 1s
+        scr 2s
+        scr 3s
+        scr 4s
+        scr 5s
+        scr 6s
+        scr 7s
+        scr 8s
+
+// f_nrm, fop.s's fno.
+// ams:ans, a magnitude, is shifted left until ams's 0200000 bit is set, and aexp lowered
+// by the places; a zero makes aexp and rsign zero.
+// AC and IO are clobbered.
+// Called via jsp.
+f_nrm,  dap f_nrx
+        lac u_ans
+        sas u_ams
+        jmp f_nr1
+        sza
+        jmp f_nr1
+        dzm u_aexp
+        dzm u_rsign
+        jmp f_nrx
+f_nr1,  lac u_ams
+        and f_b1
+        sza
+        jmp f_nrx
+        dzm f_s
+        lio u_ans
+        lac u_ams
+f_nr2,  sza
+        jmp f_nr3
+        swp                     // AC zero, so AC:IO up 17 places at once
+        rcr 1s
+        dac f_x
+        lac f_s
+        add f_d17
+        dac f_s
+        lac f_x
+        jmp f_nr2
+f_nr3,  dac f_x
+        and f_hi9
+        sza
+        jmp f_nr4
+        lac f_x                 // below 01000, up 8 places
+        rcl 8s
+        dac f_x
+        lac f_s
+        add f_d8
+        dac f_s
+        lac f_x
+        jmp f_nr3
+f_nr4,  lac f_x
+        and f_b1
+        sza
+        jmp f_nr5
+        lac f_x
+        rcl 1s
+        dac f_x
+        idx f_s
+        jmp f_nr4
+f_nr5,  lac f_x
+        dac u_ams
+        dio u_ans
+        lac u_aexp
+        sub f_s
+        dac u_aexp
+f_nrx,  jmp .
+
+// f_pack, a magnitude in 17-bit digits f_l2 (at most 3), f_l1, f_l0 into ams:ans,
+// shifted right one place and aexp raised when it reaches 2^35.
+// f_l1 may be 2^17, carried into f_l2 here.
+// AC and IO are clobbered.
+// Called via jsp.
+f_pack, dap f_pkx
+        lac f_l1
+        sma
+        jmp f_pk0
+        and f_m17               // l1 is 2^17, carried
+        dac f_l1
+        idx f_l2
+f_pk0,  lac f_l2
+        ral 9s
+        ral 7s
+        dac f_t                 // l2 << 16
+        lio f_l0
+        ril 1s
+        lac f_l1
+        rcr 1s                  // AC:IO = l1 * 2^17 + l0
+        ior f_t                 // no bit shared; add would make 0777777 a +0
+        sma
+        jmp f_pk1
+        rcr 1s                  // 2^35 or more, down one place
+        and f_m17
+        dac f_t
+        lac u_aexp
+        add f_one
+        dac u_aexp
+        lac f_t
+f_pk1,  dac u_ams
+        dio u_ans
+f_pkx,  jmp .
+
+// fld, the accumulator from the operand.
+// Exit: AC = the low word.
+// AC is the low word, IO is preserved.
+// Called via jda, the operand's address in the next word.
+u_fld,  0
+        dap r_fld
+        lac i r_fld
+        dap f_l0a
+        add f_one
+        dap f_l1a
+        add f_one
+        dap f_l2a
+        idx r_fld
+f_l0a,  lac .
+        dac u_aexp
+f_l1a,  lac .
+        dac u_ams
+f_l2a,  lac .
+        dac u_ans
+r_fld,  jmp .
+
+// fst, the accumulator to the operand.
+// Exit: AC = the low word.
+// AC is the low word, IO is preserved.
+// Called via jda, the operand's address in the next word.
+u_fst,  0
+        dap r_fst
+        lac i r_fst
+        dap f_s0a
+        add f_one
+        dap f_s1a
+        add f_one
+        dap f_s2a
+        idx r_fst
+        lac u_aexp
+f_s0a,  dac .
+        lac u_ams
+f_s1a,  dac .
+        lac u_ans
+f_s2a,  dac .
+r_fst,  jmp .
+
+// fng, the accumulator negated.
+// A high word of zero stays zero, and 0400000 becomes 0.
+// Exit: AC = the new high word.
+// AC is the high word, IO is preserved.
+// Called via jda.
+u_fng,  0
+        dap r_fng
+        lac u_ams
+        sza
+        xor f_sgn
+        dac u_ams
+r_fng,  jmp .
+
+// fix, the integer floor of the accumulator, from its high word.
+// It is 0 or -1 below 1 in magnitude, 0377777 or 0400000 at 2^17 and above.
+// Exit: AC = the integer.
+// AC is the result, IO is clobbered.
+// Called via jda.
+u_fix,  0
+        dap r_fix
+        lac u_aexp
+        sma sza i
+        jmp f_fx1               // aexp 0 or less
+        sub f_d17
+        sub f_one
+        sma
+        jmp f_fx3               // aexp 18 or more
+        cma
+        sub f_one
+        dac f_k                 // 17 - aexp, 0 to 16
+        lac u_ams
+        and f_m17
+        dac f_x
+        lac u_ams
+        spa
+        jmp f_fx2
+        cli
+        jsp f_srk               // m >> k
+r_fix,  jmp .
+f_fx2,  lac f_x                 // negative, -(ceiling of m / 2^k)
+        sza i
+        jmp r_fix
+        sub f_one
+        dac f_x
+        cli
+        jsp f_srk
+        add f_one
+        cma
+        jmp r_fix
+f_fx1,  lac u_ams                // 0 when positive, else -1
+        sma
+        cla
+        spa
+        lac f_mone
+        jmp r_fix
+f_fx3,  lac u_ams                // 0377777 when positive, else 0400000
+        and f_sgn
+        sza i
+        lac f_m17
+        jmp r_fix
+
+// flt, an integer to the accumulator.
+// Entry: AC = the integer.
+// Exit: AC = the high word.
+// AC is the high word, IO is clobbered.
+// Called via jda.
+u_flt,  0
+        dap r_flt
+        lac u_flt
+        sas f_mz
+        jmp f_fl1
+        cla                     // -0 is 0
+f_fl1,  dac u_tmp
+        dzm u_ans
+        spa
+        cma
+        dac u_ams
+        lac f_d17
+        dac u_aexp
+        jsp f_nrm
+        lac u_tmp
+        and f_sgn
+        xor u_ams
+        dac u_ams
+r_flt,  jmp .
+
+#ifndef FOP_NOFNO
+// fno, the accumulator normalized.
+// AC and IO are clobbered.
+// Called via jda.
+u_fno,  0
+        dap r_fno
+        jsp f_nrm
+r_fno,  jmp .
+#endif
+
+// fcp, the accumulator compared with the operand, as fop.s compared.
+// It tests exponents, then high words, then the low words' 18-bit difference, the sense
+// turned when both are negative.
+// When the signs differ, AC is the magnitude's high word with its last bit turned and the
+// accumulator keeps that magnitude, as fop.s left them.
+// Exit: AC negative when the accumulator is less than the operand, +0 when equal.
+// AC is the result, IO is preserved.
+// Called via jda, the operand's address in the next word.
+u_fcp,  0
+        dap r_fcp
+        lac i r_fcp
+        jda f_garg
+        idx r_fcp
+        lac u_rsign
+        spa
+        jmp f_fc9
+        lac u_ams
+        dac f_x                 // the magnitude
+        xor u_asign
+        dac u_ams
+        sza i
+        jmp f_fc2               // the accumulator's high word zero
+        lac u_hms
+        sza
+        jmp f_fc3
+        lac f_x                 // the operand's high word zero
+        sza
+        jmp f_fc4
+        jmp f_fcl
+f_fc3,  lac u_aexp
+        sub u_hexp
+        sza
+        jmp f_fc4
+f_fc2,  lac f_x
+        sub u_hms
+        sza
+        jmp f_fc4
+f_fcl,  lac u_ans               // ans - hls, modulo 2^18
+        dac f_t
+        xor u_hls
+        and f_sgn
+        dac f_u
+        lac u_hls
+        and f_m17
+        dac f_k
+        lac f_t
+        and f_m17
+        sub f_k
+        sma
+        jmp f_fc5
+        cma
+        sub f_one
+        cma
+f_fc5,  xor f_u
+        sza i
+        jmp r_fcp               // equal, +0, the sign not turned (fop.s's sza)
+f_fc4,  xor u_asign
+r_fcp,  jmp .
+f_fc9,  lac u_ams
+        xor f_one
+        jmp r_fcp
+
+// fad, the operand added to the accumulator.
+// As in fop.s, the smaller is shifted right one place more than the exponents differ, the
+// larger one place, so that the sum fits, the bits shifted out lost; then normalized.
+// For speed, with fop.s's results, the larger is moved to the accumulator in place, once,
+// where fop.s's 6f exchanged all three words and tested again; a shift of 8 places or
+// fewer is done in line; and a sum normal, or one place short of it, is normalized here,
+// any other by f_nrm.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+u_fad,  0
+        dap r_fad
+        lac i r_fad
+        jda f_garg
+        idx r_fad
+        lac u_hms
+        sza i
+        jmp f_fa4               // the operand's high word zero
+        lac u_ams
+        sza i
+        jmp f_fa8               // the accumulator's
+        lac u_hexp
+        sub u_aexp
+        sma sza i
+        jmp f_fa6               // the accumulator's exponent at least the operand's
+        dac f_d                 // the operand's larger, by d, so the two are exchanged
+        lac u_rsign
+        xor u_asign
+        dac u_asign             // the larger's sign
+        lac u_hexp
+        dac u_aexp              // its exponent (u_hexp not read after this)
+        lac u_ams
+        lio u_hms
+        dac u_hms
+        dio u_ams
+        lac u_ans
+        lio u_hls
+        dac u_hls
+        dio u_ans
+        jmp f_fa5
+f_fa6,  lac u_aexp
+        sub u_hexp
+        dac f_d
+f_fa5,  lac f_d
+        sub f_d34
+        sma
+        jmp f_fa9               // 34 places or more, the accumulator alone
+        lac u_ams               // the accumulator >> 1
+        dac f_ah
+        lac u_ans
+        rar 1s
+        and f_m17
+        dac f_al
+        lac f_d                 // the operand, u_hms:u_hls, >> (d + 1)
+        sub f_d8
+        sma
+        jmp f_fal               // 9 places or more, by f_srk
+        add f_tsc9              // f_tscr + d + 1
+        dap f_fax
+        lac u_hms
+        lio u_hls
+f_fax,  xct .
+f_fa7,  rcl 1s                  // in 17-bit digits
+        dac f_hh
+        lai
+        rar 1s
+        dac f_hl
+        lac u_rsign
+        spa
+        jmp f_fs0
+        dzm f_flip              // the same signs, the sum
+        lac f_al
+        add f_hl                // at most 0777776, exact
+        spa
+        jmp f_fac
+        lia                     // no carry, IO the low digit
+        ril 1s
+        lac f_ah
+        add f_hh                // at most 0777776, exact
+        jmp f_fa3
+f_fac,  and f_m17               // a carry
+        lia
+        ril 1s
+        lac f_ah
+        add f_hh
+        sad f_mone
+        jmp f_fam
+        add f_one
+        jmp f_fa3
+f_fam,  lac f_mz                // 0777776 and the carry, 0777777, which add makes +0
+        jmp f_fa3
+f_fal,  lac f_d
+        add f_one
+        dac f_k
+        lac u_hms
+        dac f_x
+        lio u_hls
+        jsp f_srk
+        jmp f_fa7
+f_fs0,  lac f_ah                // different signs, the larger less the smaller
+        sub f_hh
+        sza
+        jmp f_fs1
+        lac f_al
+        sub f_hl
+f_fs1,  sma
+        jmp f_fs2
+        lac f_ah
+        lio f_hh
+        dac f_hh
+        dio f_ah
+        lac f_al
+        lio f_hl
+        dac f_hl
+        dio f_al
+        lac f_sgn
+        jmp f_fs3
+f_fs2,  cla
+f_fs3,  dac f_flip
+        lac f_al
+        sub f_hl
+        sma
+        jmp f_fs4
+        add f_sgn               // a borrow, 2^17 + the difference
+        lia
+        ril 1s
+        lac f_ah
+        sub f_hh
+        sub f_one
+        jmp f_fa3
+f_fs4,  lia
+        ril 1s
+        lac f_ah
+        sub f_hh
+f_fa3,  rcr 1s                  // AC the high digit, IO the low one up a place
+        dac u_ams
+        dio u_ans
+        and f_b1
+        sza i
+        jmp f_fan
+        lac u_aexp              // normal
+        add f_one
+        dac u_aexp
+f_fat,  lac f_flip
+        xor u_asign
+        xor u_ams
+        dac u_ams
+        jmp r_fad
+f_fan,  lac u_ams
+        and f_b2
+        sza i
+        jmp f_fag
+        lac u_ams               // one place short, up one, as f_nrm would
+        rcl 1s
+        dac u_ams
+        dio u_ans
+        lac u_aexp
+        add f_one
+        sub f_one
+        dac u_aexp
+        jmp f_fat
+f_fag,  lac u_aexp
+        add f_one
+        dac u_aexp
+        lac f_flip
+        xor u_asign
+        dac u_rsign
+        jsp f_nrm
+f_fa4,  lac u_ams
+        xor u_rsign
+        dac u_ams
+r_fad,  jmp .
+f_fa8,  lac u_hexp              // the accumulator's high word zero, so the operand
+        dac u_aexp
+        lac u_hms
+        dac u_ams
+        lac u_hls
+        dac u_ans
+        jmp f_fa4
+f_fa9,  lac u_asign
+        dac u_rsign
+        jsp f_nrm
+        jmp f_fa4
+
+// fmp, the accumulator times the operand.
+// As in fop.s, with each magnitude doubled to 36 bits a1:a0 and h1:h0, the product is
+// a1*h1 + (a1*h0 + a0*h1) / 2^18, the low halves' product left out, shifted down one place
+// when it reaches 2^35.
+// Here it is in 17-bit digits, a1 being t*2^17 + m and a0 being 2 x.
+// For speed, with fop.s's results, the operand is fetched here, not by f_garg; the low
+// digit's sum is kept in AC, its carries counted in f_l1 and the middle digit's in f_l2
+// (F_ADDL, F_ADDM); the packing is in line.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+#define F_ADDL(w) add w; sma; jmp .+5; and f_m17; dac f_l0; idx f_l1; lac f_l0
+#define F_ADDM(w) add w; sma; jmp .+5; and f_m17; dac f_l1; idx f_l2; lac f_l1
+u_fmp,  0
+        dap r_fmp
+        lac i r_fmp
+        dap f_mg0
+        add f_one
+        dap f_mg1
+        add f_one
+        dap f_mg2
+        idx r_fmp
+f_mg0,  lac .                   // the operand's exponent
+        add u_aexp
+        sub f_one
+        dac u_aexp
+f_mg1,  lac .                   // its high word
+        dac f_t
+        xor u_ams
+        and f_sgn
+        dac u_rsign
+        lac u_ams
+        and f_m17
+        sza i
+        jmp f_fm0
+        lio u_ans
+        rcl 1s
+        dac f_ta
+        and f_m17
+        dac f_ma
+        lai
+        rar 1s
+        dac f_x0
+        lac f_t
+        and f_m17
+        sza i
+        jmp f_fm0
+f_mg2,  lio .                   // its low word
+        rcl 1s
+        dac f_th
+        and f_m17
+        dac f_mh
+        lai
+        rar 1s
+        dac f_y0
+        dzm f_l1
+        dzm f_l2
+        lac f_ta
+        and f_th
+        spa
+        idx f_l2                // t_a t_h 2^34
+        lac f_ma
+        mul f_mh                // ma * mh
+        dac f_q1                // its high digit
+        lai
+        rar 1s
+        dac f_q2                // and its low
+        lac f_ma
+        mul f_y0                // ma * y0
+        dac f_p1
+        lai
+        rar 1s
+        dac f_l0
+        lac f_x0
+        mul f_mh                // x0 * mh
+        dac f_p2
+        lai
+        rar 1s
+        add f_l0                // the two low digits, only their carry kept
+        ral 1s
+        and f_one
+        add f_p1                // below 2^17, since p1 is at most 2^17 - 2
+        F_ADDL(f_p2)
+        F_ADDL(f_q2)
+        lio f_ta
+        spi i
+        jmp f_fm1
+        F_ADDL(f_y0)
+f_fm1,  lio f_th
+        spi i
+        jmp f_fm2
+        F_ADDL(f_x0)
+f_fm2,  dac f_l0
+        lac f_l1                // the middle digit
+        F_ADDM(f_q1)
+        lio f_ta
+        spi i
+        jmp f_fm4
+        F_ADDM(f_mh)
+f_fm4,  lio f_th
+        spi i
+        jmp f_fm5
+        F_ADDM(f_ma)
+f_fm5,  dac f_l1                // packed, l2 2^34 + l1 2^17 + l0
+        lac f_l2
+        ral 9s
+        ral 7s
+        dac f_t
+        lio f_l0
+        ril 1s
+        lac f_l1
+        rcr 1s
+        ior f_t                 // no bit shared; add would make 0777777 a +0
+        sma
+        jmp f_fm3
+        rcr 1s                  // 2^35 or more, down one place
+        and f_m17
+        dac f_t
+        lac u_aexp
+        add f_one
+        dac u_aexp
+        lac f_t
+f_fm3,  xor u_rsign
+        dac u_ams
+        dio u_ans
+r_fmp,  jmp .
+f_fm0,  dzm u_aexp
+        dzm u_ams
+        dzm u_ans
+        jmp r_fmp
+
+// sfmp, the high words alone multiplied, as in fop.s.
+// The product is (2 ams)(2 hms) / 2^18, shifted down one place when it reaches 2^17; the
+// low word is kept.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+u_sfmp, 0
+        dap r_sfmp
+        lac i r_sfmp
+        jda f_garg
+        idx r_sfmp
+        lac u_aexp
+        add u_hexp
+        sub f_one
+        dac u_aexp
+        lac u_ams
+        sza i
+        jmp f_sm0
+        lac u_hms
+        sza i
+        jmp f_sm0
+        lac u_ams
+        mul u_hms
+        dac f_t                 // the product >> 17
+        rcl 1s                  // and >> 16
+        spa
+        jmp f_sm1
+        xor u_rsign
+        dac u_ams
+r_sfmp, jmp .
+f_sm1,  lac u_aexp
+        add f_one
+        dac u_aexp
+        lac f_t
+        xor u_rsign
+        dac u_ams
+        jmp r_sfmp
+f_sm0,  dzm u_aexp
+        dzm u_ams
+        jmp r_sfmp
+
+// sfdv, the high words alone divided, as in fop.s.
+// The quotient is ams * 2^17 / hms, shifted down one place when it reaches 2^17; the low
+// word is kept.
+// A zero divisor, or a quotient fop.s's divide could not hold, calls sys save as fop.s
+// did.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+u_sfdv, 0
+        dap r_sfdv
+        lac i r_sfdv
+        jda f_garg
+        idx r_sfdv
+        lac u_aexp
+        sub u_hexp
+        dac u_aexp
+        lac u_hms
+        sza i
+        cal 01
+        lac u_ams
+        sub u_hms
+        spa
+        jmp f_sd1
+        sub u_hms
+        sma
+        cal 01
+        lac u_aexp
+        add f_one
+        dac u_aexp
+        lac u_ams               // ams * 2^16 / hms
+        cli
+        rcr 1s
+        jmp f_sd2
+f_sd1,  lac u_ams               // ams * 2^17 / hms
+        cli
+f_sd2,  div u_hms
+        cal 01
+        xor u_rsign
+        dac u_ams
+r_sfdv, jmp .
+
+// fdv, the accumulator divided by the operand, to within a few units of the 35th bit
+// (fop.s's divided by the operand's high word and part of its low, through the EAE's
+// 18-bit unsigned divide).
+// With A and H the magnitudes, Hh and Hl the operand's words, A is halved, and aexp
+// raised, when ams >= hms; Q0 = A * 2^17 / Hh in three divides; e = Hl / (Hh * 2^18),
+// below 2^-16; the quotient is Q0 (1 - e + e^2).
+// A zero divisor calls sys save, as fop.s did.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+u_fdv,  0
+        dap r_fdv
+        lac i r_fdv
+        jda f_garg
+        idx r_fdv
+        lac u_hms
+        sza i
+        cal 01
+        lac u_aexp
+        sub u_hexp
+        dac u_aexp
+        lac u_ams
+        sza i
+        jmp f_fd0
+        sub u_hms
+        spa
+        jmp f_fd1
+        lac u_aexp
+        add f_one
+        dac u_aexp
+        lac u_ams
+        lio u_ans
+        rcr 1s
+        and f_m17
+        jmp f_fd2
+f_fd1,  lac u_ams
+        lio u_ans
+f_fd2,  rcl 1s                  // AC = A' >> 17, IO = (A' mod 2^17) << 1
+        dac f_t
+        dio f_x0
+        and f_m17
+        dac f_u
+        lio f_u
+        ril 1s                  // IO = n2 << 1
+        lac f_t
+        sma
+        jmp f_fd3
+        lac f_one
+        jmp f_fd4
+f_fd3,  cla
+f_fd4,  div u_hms               // q3, 0 or 1
+        cal 01
+        dac f_q3
+        lai
+        lio f_x0
+        div u_hms               // q2
+        cal 01
+        dac f_q2
+        lai
+        cli
+        div u_hms               // q1
+        cal 01
+        dac f_q1
+        cla                     // E = Hl * 2^15 / Hh, below 2^17
+        lio u_hls
+        rcl 9s
+        rcl 7s
+        div u_hms
+        cal 01
+        dac f_e
+        lac f_q3                // T = Q0 * E / 2^33, (Q0 >> 18) * E / 2^15
+        ral 9s
+        ral 7s
+        dac f_t
+        lac f_q2
+        sar 1s
+        add f_t
+        mul f_e
+        dac f_t
+        rcl 2s
+        and f_m17
+        dac f_t0
+        lac f_t
+        sar 9s
+        sar 6s
+        dac f_t1
+        lac f_q2                // and ((Q0 mod 2^18) >> 1) * E / 2^32
+        and f_one
+        ral 9s
+        ral 7s
+        dac f_t
+        lac f_q1
+        sar 1s
+        add f_t
+        mul f_e
+        sar 9s
+        sar 6s
+        dac f_t
+        F_ADDC(f_t0, f_t1, f_t)
+        lac f_t1                // T2 = T * E / 2^33, (T >> 3) * E / 2^30
+        ral 9s
+        ral 5s
+        dac f_t
+        lac f_t0
+        sar 3s
+        add f_t
+        mul f_e
+        sar 9s
+        sar 4s
+        dac f_a
+        lac f_q3                // Q = Q0 - T + T2, T taken first
+        dac f_l2
+        lac f_q2
+        dac f_l1
+        lac f_q1
+        sub f_t0
+        sma
+        jmp f_fd5
+        add f_sgn               // a borrow, 2^17 + the difference
+        dac f_l0
+        lac f_l1
+        sub f_one
+        dac f_l1
+        jmp f_fd6
+f_fd5,  dac f_l0
+f_fd6,  lac f_l1
+        sub f_t1
+        sma
+        jmp f_fd7
+        add f_sgn
+        dac f_l1
+        lac f_l2
+        sub f_one
+        dac f_l2
+        jmp f_fd8
+f_fd7,  dac f_l1
+f_fd8,  F_ADDC(f_l0, f_l1, f_a) // l1 may reach 2^17, which f_pack takes
+        jsp f_pack
+        lac u_ams
+        and f_b1
+        sza i
+        jsp f_nrm
+        lac u_ams
+        xor u_rsign
+        dac u_ams
+r_fdv,  jmp .
+f_fd0,  dzm u_aexp
+        dzm u_ams
+        jmp r_fdv
+
+#ifndef FOP_NOSFAD
+// sfad, the operand added with 17 bits.
+// The accumulator's low word is kept, the operand's taken as zero, the sum's high word
+// kept.
+// fop.s's sfad, which no program calls, is not matched bit for bit.
+// AC and IO are clobbered.
+// Called via jda, the operand's address in the next word.
+u_sfad, 0
+        dap r_sfad
+        lac i r_sfad
+        dap f_sa0
+        add f_one
+        dap f_sa1
+f_sa0,  lac .
+        dac f_sop
+f_sa1,  lac .
+        dac f_sop+1
+        dzm f_sop+2
+        lac u_ans
+        dac f_sav
+        dzm u_ans
+        jda u_fad
+        f_sop
+        lac f_sav
+        dac u_ans
+        idx r_sfad
+r_sfad, jmp .
+f_sop,  0
+        0
+        0
+f_sav,  0
+#endif
+
+// sqrt, the square root of the accumulator.
+// As in fop.s, the exponent is halved, the magnitude x taken as m or m/2 so that the
+// exponent is whole, the guess (1 + m)/2 or m/2 + 1/4, then Heron's step,
+// y = (x/y + y)/2, twice in 17 bits and once in full.
+// A negative accumulator calls sys save, as fop.s did; a zero one keeps its high word and
+// takes the halved exponent.
+// AC and IO are clobbered.
+// Called via jda.
+u_sqrt, 0
+        dap r_sqrt
+        lac u_aexp
+        add f_one
+        spa
+        jmp f_sq1
+        dac f_t
+        and f_one
+        dac f_sqk               // the parity of aexp + 1
+        lac f_t
+        sar 1s
+        jmp f_sq2
+f_sq1,  cma                     // negative, floor((aexp + 1) / 2)
+        dac f_t
+        and f_one
+        dac f_sqk
+        lac f_t
+        add f_one
+        sar 1s
+        cma
+f_sq2,  dac f_sqd               // the result's exponent
+        lac u_ams
+        spa
+        cal 01
+        sza i
+        jmp f_sqz
+        lac f_sqk
+        sza i
+        jmp f_sq3
+        lac u_ams               // aexp even, x = m, the guess (1 + m)/2
+        dac f_sqx
+        sar 1s
+        add f_b1
+        jmp f_sq4
+f_sq3,  lac u_ams               // aexp odd, x = m/2, the guess m/2 + 1/4
+        sar 1s
+        dac f_sqx
+        add f_q15
+f_sq4,  dac f_sqy
+        jsp f_sqh
+        jsp f_sqh
+        lac f_sqk               // the full step, x with exponent 0 or -1
+        sza i
+        jmp f_sq5
+        dzm u_aexp
+        jmp f_sq6
+f_sq5,  lac f_mone
+        dac u_aexp
+f_sq6,  dzm f_sqv
+        lac f_sqy
+        dac f_sqv+1
+        dzm f_sqv+2
+        jda u_fdv
+        f_sqv
+        jda u_fad
+        f_sqv
+        lac u_aexp
+        sub f_one
+        add f_sqd
+        dac u_aexp
+r_sqrt, jmp .
+f_sqz,  lac f_sqd
+        dac u_aexp
+        jmp r_sqrt
+
+// f_sqh, Heron's step in 17 bits, f_sqy = (f_sqx * 2^17 / f_sqy + f_sqy) / 2.
+// Both are fractions of 2^17 and x below y; a quotient too large leaves y.
+// Entry: f_sqx and f_sqy.
+// Exit: f_sqy, the new y.
+// AC and IO are clobbered.
+// Called via jsp.
+f_sqh,  dap f_sqhx
+        lac f_sqx
+        cli
+        div f_sqy
+        jmp f_sqhx
+        add f_sqy
+        rar 1s
+        and f_m17
+        dac f_sqy
+f_sqhx, jmp .
+
+f_sqk,  0
+f_sqd,  0
+f_sqx,  0
+f_sqy,  0
+f_q15,  0100000
+f_sqv,  0
+        0
+        0
+
+#ifndef FOP_NOSIN
+#ifdef FOP_TSIN
+// sin, from a table, the sine of the accumulator within 2e-5 (the linear interpolation's
+// error at most (pi/256)^2/8, 1.9e-5), where fop.s's series costs some 7,700 instructions.
+// |x| below 2^-5 is its own sine (within x^3/6, 6.4e-7).
+// Else u = |x| 2/pi in fixed point.
+// That is the 34 bits of |x|'s magnitude above its last times 2/pi in 34 bits, the low
+// digits' product left out, shifted so that u's quadrant is in AC's 0600 bits, its next 7
+// bits, the table's index i, in AC's 0177 and the 18 bits below in IO, of which the top 17
+// are r, the place between entries i and i + 1.
+// An odd quadrant takes u's fraction turned (i and r complemented, 2^-24 of a quadrant
+// short of 1 - fraction), the third and fourth the sign turned.
+// Then N = S[i] + (S[i+1] - S[i]) r / 2^17, the product truncated, in units of 2^-23,
+// normalized into the accumulator.
+// Above 2^10 the reduction keeps fewer of u's bits below the point, 2^(k-34) at 2^k, and
+// from 2^37 the result is 0, bounded where fop.s's grows without bound.
+// AC and IO are clobbered.
+// Called via jda.
+u_sin,  0
+        dap r_sin
+        lac u_ams
+        and f_sgn
+        dac f_sgw
+        xor u_ams
+        dac u_ams               // Mh, |x|'s top 17 bits
+        lac u_aexp
+        spa
+        sub f_tm5               // a negative aexp plus 5, -5 giving +0
+        spa
+        jmp f_tsx               // aexp -6 or less, x itself
+        lac u_ans
+        sar 1s
+        and f_m17
+        dac f_tml               // Ml, the low word's top 17 bits
+        lac u_ams
+        mul f_tcl
+        dac f_q1                // Mh * Cl, its high digit
+        lai
+        rar 1s
+        dac f_q2                // and its low
+        lac f_tml
+        mul f_tch
+        dac f_q3                // Ml * Ch, its high digit
+        lai
+        rar 1s
+        add f_q2                // the two low digits, below 0777777
+        and f_sgn
+        sza
+        lac f_one
+        dac f_t                 // their carry
+        lac u_ams
+        mul f_tch
+        dac f_l2                // Mh * Ch, D2, the product's bits 51 up
+        lai
+        rar 1s
+        dac f_l1                // D1, its bits 34 to 50
+        F_ADDC(f_l1, f_l2, f_q1)
+        F_ADDC(f_l1, f_l2, f_q3)
+        F_ADDC(f_l1, f_l2, f_t)
+        lac f_l1
+        ral 1s
+        dac f_t
+        lio f_t                 // AC:IO will be D2:D1, times 2
+        lac f_d10
+        sub u_aexp              // k = 10 - aexp
+        spa
+        jmp f_tl
+        dac f_k
+        lac f_l2
+        dac f_x
+        jsp f_srk               // AC:IO down k places
+f_tw,   dac f_x                 // the quadrant and i
+        lai
+        sar 1s
+        and f_m17
+        dac f_tr                // r
+        lac f_x
+        and f_t177
+        dac f_ti                // i
+        lac f_x
+        and f_t200
+        sza i
+        jmp f_te
+        lac f_ti                // an odd quadrant, the fraction turned
+        xor f_t177
+        dac f_ti
+        lac f_tr
+        xor f_m17
+        dac f_tr
+f_te,   lac f_x
+        and f_t400
+        sza
+        lac f_sgn               // the third and fourth quadrants, negative
+        xor f_sgw
+        dac f_sgw
+        lac f_ti
+        ral 1s
+        add f_tba
+        dap f_ta0               // S[i]'s high digit
+        add f_one
+        dap f_ta1               // its low
+        dap f_ta2
+        add f_two
+        dap f_ta3               // S[i+1]'s low
+f_ta0,  lac .
+        dac f_l2
+f_ta1,  lac .
+        dac f_l1
+f_ta3,  lac .
+f_ta2,  sub .                   // S[i+1] - S[i] below 2^17, the low digits' difference,
+        sma
+        jmp f_td
+        and f_m17               // or, negative, that plus 2^17
+        add f_one
+f_td,   mul f_tr
+        dac f_t                 // the difference times r / 2^17
+        F_ADDC(f_l1, f_l2, f_t)
+        lac f_l1
+        ral 1s
+        dac f_t
+        lio f_t
+        lac f_l2
+        rcl 9s
+        rcl 1s                  // AC:IO = N * 2^11
+        dac u_ams
+        dio u_ans
+        lac f_one
+        dac u_aexp              // the value N * 2^-23
+        jsp f_nrm
+        lac u_ams
+        sza i
+        jmp r_sin               // zero, no sign
+f_tsx,  lac u_ams
+        xor f_sgw
+        dac u_ams
+r_sin,  jmp .
+
+// aexp above 10, AC:IO up s = aexp - 10 places, at most 27.
+// At 27 the 27 bits used are 0.
+f_tl,   cma
+        sub f_d27
+        sma
+        cla
+        add f_d27
+        dac f_kk                // s
+        lac f_l2
+f_tl1,  scl 1s
+        dac f_x
+        lac f_kk
+        sub f_one
+        dac f_kk
+        sza i
+        jmp f_tl2
+        lac f_x
+        jmp f_tl1
+f_tl2,  lac f_x
+        jmp f_tw
+
+f_sgw,  0
+f_tml,  0
+f_ti,   0
+f_tr,   0
+f_tm5,  0777772                 // -5
+f_two,  2
+f_d10,  12
+f_d27,  33
+f_t177, 0177
+f_t200, 0200
+f_t400, 0400
+f_tch,  0242763                 // 2/pi in 34 bits, 10937044409, its high digit
+f_tcl,  0006671                 // and the low
+f_tba,  f_tab
+#include "fsintab.ac"
+#else
+// sin, the sine of the accumulator, as in fop.s.
+// The magnitude is reduced by the multiple n of pi below it, the sign turned for an odd n,
+// then six more terms of the series.
+// AC and IO are clobbered.
+// Called via jda.
+u_sin,  0
+        dap r_sin
+        lac u_ams
+        and f_sgn
+        dac f_sgw
+        xor u_ams
+        dac u_ams
+        jda u_fst
+        f_sn1
+        jda u_fdv
+        f_pi
+        jda u_fix
+        dac f_sn
+        and f_one
+        sza i
+        jmp f_si1
+        lac f_sgn
+        xor f_sgw
+        dac f_sgw
+f_si1,  lac f_sn
+        jda u_flt
+        jda u_fmp
+        f_pi
+        jda u_fng
+        jda u_fad
+        f_sn1
+        jda u_fst
+        f_strm
+        jda u_fst
+        f_sres
+        jda u_fst
+        f_sn2
+        jda u_fld
+        f_fp1
+        jda u_fst
+        f_sfac
+        law i 6
+        dac f_scnt
+f_si2,  jda u_fld
+        f_sfac
+        jda u_fad
+        f_fp1
+        jda u_fst
+        f_sn1
+        jda u_fad
+        f_fp1
+        jda u_fst
+        f_sfac
+        jda u_fld
+        f_strm
+        jda u_fmp
+        f_sn2
+        jda u_fmp
+        f_sn2
+        jda u_fdv
+        f_sfac
+        jda u_fdv
+        f_sn1
+        jda u_fng
+        jda u_fst
+        f_strm
+        jda u_fad
+        f_sres
+        jda u_fst
+        f_sres
+        idx f_scnt
+        sza
+        jmp f_si2
+        lac u_ams
+        xor f_sgw
+        dac u_ams
+r_sin,  jmp .
+
+f_sgw,  0
+f_sn,   0
+f_scnt, 0
+f_sn1,  0
+        0
+        0
+f_sn2,  0
+        0
+        0
+f_strm, 0
+        0
+        0
+f_sres, 0
+        0
+        0
+f_sfac, 0
+        0
+        0
+f_fp1,  1
+        0200000
+        0
+f_pi,   2
+        0311037
+        0552421
+#endif
+#endif

@@ -1,0 +1,306 @@
+// as1pi.ac holds what as1's last two overlays, as1p.am1 and as1o.am1, share.
+// That is a word's size, its PDP-1 address, and its record read back from
+// as1t.
+// See as1c.ac for the flags' shape and the records.
+
+// The number of PDP-1 words of word k, from its flags.
+// A reserved word, or one past a.out's, is 1; an entry 3; a skip
+// nPre+3+2*nPost, or with no words after it nPre+1, or nPre+2 when the next
+// word is more than one (FSIZE, as1p's mark); any other word its count.
+// Entry: AC = k.
+// Exit: AC = the size.
+// IO is preserved.
+// Called via jda.
+wsize,  0
+        dap wsizex
+        lac wsize
+        jda getf
+        dac wsf
+        and [KMASK]
+        sza i
+        jmp ws1
+        lac wsf
+        and [FENT]
+        sza
+        jmp ws3
+        lac wsf
+        and [FSKIP]
+        sza
+        jmp ws4
+        lac wsf
+        and [FSIZE]
+        jmp wsizex
+ws1,
+        lac [1]
+        jmp wsizex
+ws3,
+        lac [3]
+        jmp wsizex
+ws4,
+        lac wsf
+        sar 6s
+        and [07]
+        dac wsn
+        lac wsf
+        and [FSIZE]
+        sza i
+        jmp ws5
+        sad [FSIZE]
+        jmp ws6
+        sal 1s
+        add [3]
+        add wsn
+        jmp wsizex
+ws5,
+        lac wsn
+        add [1]
+        jmp wsizex
+ws6,
+        lac wsn
+        add [2]
+wsizex, jmp .
+
+// The PDP-1 address of PDP-7 word i, 0 or more.
+// It is the origin, plus the words before i's group of 16 (MAPT), plus the
+// sizes of those before i in it.
+// Past a.out's words, it is the origin plus the total (after the last
+// group's in MAPT) and one a word.
+// It is not masked to 12 bits.
+// Entry: AC = i.
+// Exit: AC = the address.
+// IO is preserved.
+// Called via jda.
+mapt,   0
+        dap maptx
+        lac mapt
+        sub nw
+        spa
+        jmp mt1
+        dac mts
+        lac nw
+        sar 4s
+        add [MAPT+1]
+        dac mtp
+        lac i mtp
+        add mts
+        jmp mt3
+mt1,
+        lac mapt
+        sar 4s
+        add [MAPT]
+        dac mtp
+        lac i mtp
+        dac mts
+        lac mapt
+        and [0777760]
+        dac mtj
+mt2,
+        lac mtj
+        sad mapt
+        jmp mt2a
+        jda wsize
+        add mts
+        dac mts
+        idx mtj
+        jmp mt2
+mt2a,
+        lac mts
+mt3,
+        add origin
+maptx,  jmp .
+
+// The streams to be read from their starts.
+// AC is ignored on entry and clobbered; IO is preserved.
+// Called via jda.
+rinit,  0
+        dap rinitx
+        lac sbase+SMEM
+        dac rsp+SMEM
+        lac sbase+SDAT
+        dac rsp+SDAT
+        lac sbase+SOPR
+        dac rsp+SOPR
+        lac sbase+SEAE
+        dac rsp+SEAE
+rinitx, jmp .
+
+// Word k's record, from its stream.
+// Its items go to ITEMA, ITEMB and ITEMC, rnit of them; for a skip, rhas is
+// set, the skip's word, operand and value go in rska, rskb and rskc, the
+// inverted skip's word in rski, and rnpre is the count of items before it;
+// its flags go in rdf.
+// Each stream is read in order, so k goes up by one from 0 after rinit.
+// Entry: AC = k.
+// Exit: AC = 0 for a reserved word, which has no record, else 1.
+// IO is clobbered.
+// Called via jda.
+rdrec,  0
+        dap rdrecx
+        dzm rhas
+        dzm rnit
+        dzm rnpre
+        lac rdrec
+        jda getf
+        dac rdf
+        and [KMASK]
+        sza i
+        jmp rdrecx
+        sas [KCODE]
+        jmp rd1
+        lac rdf
+        and [CMASK]
+        sad [CMEM]
+        jmp rd0m
+        sad [COPR]
+        jmp rd0o
+        sas [CEAE]
+        jmp rd1
+        lac [rsp+SEAE]
+        jmp rd2
+rd0m,
+        lac [rsp+SMEM]
+        jmp rd2
+rd0o,
+        lac [rsp+SOPR]
+        jmp rd2
+rd1,
+        lac [rsp+SDAT]
+rd2,
+        dac rpp
+        lac rdf
+        and [FENT]
+        sza i
+        jmp rd3
+        lac [3]
+        dac rnit
+        jmp rd6
+rd3,
+        lac rdf
+        and [FSKIP]
+        sza
+        jmp rd4
+        lac rdf
+        and [FSIZE]
+        dac rnit
+        jmp rd6
+
+        // For a skip, its item and the inverted skip's word come first.
+rd4,
+        idx rhas
+        lac rdf
+        sar 6s
+        and [07]
+        dac rnpre
+        lac rdf
+        and [FSIZE]
+        sad [FSIZE]                 // as1p's mark, no words after the skip
+        cla
+        add rnpre
+        dac rnit
+        jda srd
+        dac rska
+        jda srd
+        dac rskb
+        dzm rskc
+        jda rhasc
+        sza i
+        jmp rd5
+        jda srd
+        dac rskc
+rd5,
+        jda srd
+        dac rski
+
+        // The items.
+rd6,
+        dzm rj
+rd7,
+        lac rj
+        sad rnit
+        jmp rd9
+        jda srd
+        dac rw
+        lac rj
+        add [ITEMA]
+        dac rq
+        lac rw
+        dac i rq
+        jda srd
+        dac rw
+        lac rj
+        add [ITEMB]
+        dac rq
+        lac rw
+        dac i rq
+        jda rhasc                   // AC = the operand
+        dzm rw
+        sza i
+        jmp rd8
+        jda srd
+        dac rw
+rd8,
+        lac rj
+        add [ITEMC]
+        dac rq
+        lac rw
+        dac i rq
+        idx rj
+        jmp rd7
+rd9,
+        lac [1]
+rdrecx, jmp .
+
+// The next word of the stream whose place is at rpp.
+// AC is ignored on entry.
+// Exit: AC = the word.
+// IO is clobbered.
+// Called via jda.
+srd,    0
+        dap srdx
+        lac i rpp
+        lio [FTMP]
+        jda cget
+        dac srw
+        idx i rpp
+        lac srw
+srdx,   jmp .
+
+// 1 when an operand is followed by an offset or a value, as TBASE and TLIT
+// are; as1gi.ac's hasc.
+// Entry: AC = the operand.
+// Exit: AC = 1 or 0.
+// IO is preserved.
+// Called via jda.
+rhasc,  0
+        dap rhascx
+        lac rhasc
+        and [0700000]
+        sad [TBASE]
+        jmp rh1
+        sad [TLIT]
+        jmp rh1
+        cla
+        jmp rhascx
+rh1,
+        lac [1]
+rhascx, jmp .
+
+wsf,    0
+wsn,    0
+mtp,    0
+mts,    0
+mtj,    0
+rsp,    0; 0; 0; 0                  // each stream's place to read
+rpp,    0
+rdf,    0
+rhas,   0
+rnit,   0
+rnpre,  0
+rska,   0
+rskb,   0
+rskc,   0
+rski,   0
+rj,     0
+rw,     0
+rq,     0
+srw,    0

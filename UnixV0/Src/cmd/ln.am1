@@ -1,0 +1,152 @@
+ln
+// Translated by as7am1 from the PDP-7 source cmd/ln.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0110/
+w_10000,lac i 07777
+w_10001,sad u_d4
+w_10002,jmp u_error
+w_10003,lac 07777
+w_10004,add u_d1
+w_10005,dac u_dirn
+w_10006,lac i u_dirn
+w_10007,sad u_qli
+w_10010,jmp u_clink
+w_10011,lac 07777
+w_10012,add u_d5
+w_10013,dac u_dirn
+w_10014,dac u_name
+u_loop, lac i 07777
+w_10016,sad u_d8
+w_10017,cal 016
+w_10020,add u_dm4
+w_10021,dac i 07777
+w_10022,lac u_name
+w_10023,add u_d4
+w_10024,dac u_name
+w_10025,dac u_name1
+w_10026,cal 012
+u_dirn, 0000000
+u_name, 0000000
+u_name1,0000000
+w_10032,sma
+w_10033,jmp u_loop
+w_10034,lac u_name
+w_10035,dac w_10040
+w_10036,lac u_d1
+w_10037,cal 05
+w_10040,0000000
+w_10041,0000004
+w_10042,lac u_d1
+w_10043,cal 05
+w_10044,u_errmes
+w_10045,0000002
+w_10046,jmp u_loop
+u_clink,lac i 07777
+w_10050,sad u_d8
+w_10051,jmp u_arg1
+w_10052,sad u_d12
+w_10053,jmp u_arg2
+w_10054,sad u_d16
+w_10055,jmp u_arg3
+u_error,lac u_d1
+w_10057,cal 05
+w_10060,w_10144
+w_10061,0000001
+w_10062,cal 016
+u_arg1, lac 07777
+w_10064,add u_d5
+w_10065,dac w_10110
+w_10066,dac w_10111
+w_10067,jmp u_dlink
+u_arg2, lac 07777
+w_10071,add u_d5
+w_10072,dac u_larg
+w_10073,add u_d4
+w_10074,dac w_10110
+w_10075,dac w_10111
+w_10076,jmp u_dlink
+u_arg3, lac 07777
+w_10100,add u_d5
+w_10101,dac u_larg
+w_10102,add u_d4
+w_10103,dac w_10110
+w_10104,add u_d4
+w_10105,dac w_10111
+u_dlink,cal 012
+u_larg, u_defdir
+w_10110,0000000
+w_10111,0000000
+w_10112,sma
+w_10113,cal 016
+w_10114,lac u_larg
+w_10115,dac w_10124
+w_10116,lac w_10110
+w_10117,dac w_10130
+w_10120,lac w_10111
+w_10121,dac w_10134
+w_10122,lac u_d1
+w_10123,cal 05
+w_10124,0010000
+w_10125,0000004
+w_10126,lac u_d1
+w_10127,cal 05
+w_10130,0010000
+w_10131,0000004
+w_10132,lac u_d1
+w_10133,cal 05
+w_10134,0010000
+w_10135,0000004
+w_10136,lac u_d1
+w_10137,cal 05
+w_10140,u_errmes
+w_10141,0000002
+w_10142,cal 016
+u_errmes,0000040
+w_10144,0077012
+u_d1,   0000001
+u_qli,  0154151
+u_d12,  0000014
+u_d16,  0000020
+u_defdir,0163171
+w_10152,0163164
+w_10153,0145155
+w_10154,0040040
+u_d4,   0000004
+u_d8,   0000010
+u_dm4,  0777773
+u_d5,   0000005
+x_end,
+0110/
+        constants
+start 020000

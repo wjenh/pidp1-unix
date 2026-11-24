@@ -1,0 +1,147 @@
+// The kernel's display layer, after 1970's capt and rele (s2.s:29-41) and
+// its display break (s7.s:52-98), with the Type 340 in place of the
+// GRAPHIC-2.
+// Bank 0, the window open.
+// Needs unix.ah.
+
+// sys capt.
+// Entry: AC = the address of a 340 list in the caller's bank.
+// The list is started at once, and restarted at the tick after each stop
+// (dybrk).
+// The caller's words 4 to 7 get its pen hits and the sense switches.
+// The list may not use the 340's jump, save or deposit, whose 13-bit
+// addresses reach banks 0 and 1 only.
+// A capt takes the display from any process that held it.
+// AC returns as the caller left it, as in 1970.
+sysCapt,
+        lac uAc
+        and [07777]
+        ior uBank
+        lsm
+        dac dyLst
+        lac uBank
+        dac dyBnk
+        dzm dyWt
+        lac nTick
+        dac dyTk
+        d3dcf
+        lio dyLst
+        d3dla
+        esm
+        jmp sysexit
+
+// sys rele.
+// The display is stopped if the caller holds it, else nothing is done.
+// AC returns as the caller left it, as in 1970.
+sysRele,
+        lac uBank
+        sad dyBnk           // skip unless the caller holds the display
+        jda dyoff
+        jmp sysexit
+
+// Stop the display, with the kernel's empty list, one halt, started in
+// place of the captured one, and its holder forgotten.
+// For rele and exit, breaks on.
+// Exit: breaks on.
+// AC is preserved, IO is clobbered.
+// Called by jda.
+dyoff,  0
+        dap dyoX
+        lsm
+        dzm dyLst
+        dzm dyBnk
+        dzm dyWt
+        lio [dyHlt]
+        d3dla
+        esm
+        lac dyoff
+dyoX,   jmp .
+
+// The break routine's 340 step, while a list is captured (s7.ac, brk).
+// - A pen hit.
+//   Word 5 of the holder's bank gets the bank-relative address of the word
+//   hit, dra less one, since dra reads one past the word fetched.
+//   Words 6 and 7 get the hit's x and y as screen coordinates, drc's two
+//   nine-bit halves of IO, each shifted up one.
+//   Bit 0 of word 4 is set.
+//   Then the flags are cleared and the list resumed, the pen off until its
+//   next parameter word turns it on.
+// - A stop, the list's halt or an edge violation.
+//   The flags are cleared and the list waits, stopped, for the next tick.
+//   So the refresh is paced by the tick, 31 frames a second at most, as
+//   1970's .dspb paced it by its clock.
+//   A restart at every stop would let a short list break every few hundred
+//   microseconds and starve the drum.
+// - The first break of each tick.
+//   Word 4's sense switches are renewed, 1 to 6 in bits 12 to 17, bit 0
+//   kept (s7.s:31-32, lpb at each tick), and a stopped list is restarted.
+// Polled at every break, whatever broke, since a list may halt without the
+// stop interrupt, and a flag left standing must not hold the break line.
+// Break routine only, the window open.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+dybrk,  0
+        dap dybX
+        lac dyBnk
+        add [DSWORD]
+        dac dyP             // word 4
+        d3dsp               // skip on a pen hit
+        jmp dy1
+        d3dra
+        dio dyT
+        lac dyBnk
+        add [DSWORD+1]
+        dac dyQ
+        lac dyT
+        sub [1]
+        and [07777]
+        dac i dyQ           // word 5, the word hit
+        d3drc               // IO = x in bits 0-8, y in 9-17; AC is left alone
+        dio dyT
+        idx dyQ
+        lac dyT
+        rar 9s
+        and [0777]
+        ral 1s
+        dac i dyQ           // word 6, x
+        idx dyQ
+        lac dyT
+        and [0777]
+        ral 1s
+        dac i dyQ           // word 7, y
+        lac i dyP
+        ior [DSHIT]
+        dac i dyP
+        d3dcf
+        d3drs
+dy1,    d3dstp              // skip on a stop or an edge violation
+        jmp dy2
+        d3dcf
+        law 1
+        dac dyWt
+dy2,    lac nTick
+        sad dyTk            // skip if a tick has come since the last
+        jmp dybX
+        dac dyTk
+        lac i dyP
+        and [DSHIT]
+        szs 10              // each skips if its switch is off
+        ior [040]
+        szs 20
+        ior [020]
+        szs 30
+        ior [010]
+        szs 40
+        ior [04]
+        szs 50
+        ior [02]
+        szs 60
+        ior [01]
+        dac i dyP
+        lac dyWt
+        sza i               // skip if the list waits stopped
+        jmp dybX
+        dzm dyWt
+        lio dyLst
+        d3dla
+dybX,   jmp .

@@ -1,0 +1,409 @@
+ls
+// Translated by as7am1 from the PDP-7 source cmd/ls.s
+// for a process bank.
+// Word 0 holds the jump to the start, 020-077 the translator's words, 0100-0107 the
+// system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: 1970 source quotes removed and comments cleaned for the release.
+#include "unixsys.ah"
+        octal
+        bank 2
+0/
+        jmp w_10000
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+0100/
+        SYSFRAME()
+0127/
+w_10000,lac 07777
+w_10001,add u_d1
+w_10002,dac u_name
+w_10003,lac i u_name
+w_10004,sad u_ali
+w_10005,dac u_longflg
+w_10006,lac i 07777
+w_10007,sad u_d4
+w_10010,sma spa
+w_10011,jmp u_loop
+w_10012,law u_dd
+w_10013,dac u_name
+w_10014,jmp w_10025
+u_loop, lac i 07777
+w_10016,sad u_d4
+w_10017,jmp u_done
+w_10020,add u_dm4
+w_10021,dac i 07777
+w_10022,lac u_name
+w_10023,add u_d4
+w_10024,dac u_name
+w_10025,law u_s_flags
+w_10026,cal 031
+w_10027,u_dd
+u_name, 0010000
+w_10031,sma i
+w_10032,jmp u_badfile
+w_10033,lac u_s_flags
+w_10034,and u_o20
+w_10035,sza i
+w_10036,jmp u_badfile
+w_10037,lac u_name
+w_10040,dac w_10042
+w_10041,cal 03
+w_10042,0010000
+w_10043,0000000
+w_10044,sma i
+w_10045,jmp u_badfile
+w_10046,dac u_fi
+w_10047,jda u_readdir
+w_10050,lac u_fi
+w_10051,cal 011
+w_10052,lac u_o200000
+w_10053,dac u_maxfn
+w_10054,jda u_findf
+w_10055,lac u_maxfn
+w_10056,sad u_o200000
+w_10057,jmp u_loop
+w_10060,lac u_longflg
+w_10061,sza
+w_10062,jda u_longout
+w_10063,law u_maxfn
+w_10064,jda u_putfn
+w_10065,lac [0760012]
+w_10066,jda u_putc
+w_10067,lac u_o200000
+w_10070,dac i u_maxfp
+w_10071,jmp w_10052
+u_longout,0000000
+        dap r_longout
+        lac u_longout
+w_10073,lac u_name
+w_10074,dac w_10077
+w_10075,law u_s_flags
+w_10076,cal 031
+w_10077,0010000
+w_10100,u_maxfn
+w_10101,lac u_s_i
+w_10102,jda u_octal
+w_10103,0777774
+w_10104,lac u_s_flags
+w_10105,jda u_octal
+w_10106,0777775
+w_10107,lac u_s_uid
+w_10110,jda u_octal
+w_10111,0777775
+w_10112,law i 01
+w_10113,add u_s_nlinks
+w_10114,cma
+        sub [1]
+w_10115,jda u_octal
+w_10116,0777775
+w_10117,lac u_s_size
+w_10120,jda u_octal
+w_10121,0777772
+w_10122,jmp r_longout
+u_octal,0000000
+        dap r_octal
+        lac u_octal
+w_10124,lia
+w_10125,lac u_d5
+w_10126,add i r_octal
+w_10127,cma
+        sub [1]
+w_10130,dac u_t
+w_10131,dac x_lnk
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_10132,dac x_ac
+        idx u_t
+        sza
+        jmp s_10132
+        lac x_ac
+        jmp w_10134
+s_10132,lac x_ac
+w_10133,jmp w_10131
+w_10134,lac i r_octal
+w_10135,dac u_t
+w_10136,dac x_lnk
+        cla
+        rcl 3s
+        swp
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+        swp
+w_10137,add u_o60
+w_10140,jda u_putc
+w_10141,dac x_ac
+        idx u_t
+        sza
+        jmp s_10141
+        lac x_ac
+        jmp w_10143
+s_10141,lac x_ac
+w_10142,jmp w_10136
+w_10143,lac [0760040]
+w_10144,jda u_putc
+w_10145,idx r_octal
+w_10146,jmp r_octal
+u_toobig,lac [0760076]
+w_10150,jda u_putc
+w_10151,lac [0760040]
+w_10152,jda u_putc
+u_badfile,lac u_name
+w_10154,jda u_putfn
+w_10155,lac [0760040]
+w_10156,jda u_putc
+w_10157,lac [0760077]
+w_10160,jda u_putc
+w_10161,lac [0760012]
+w_10162,jda u_putc
+w_10163,jmp u_loop
+u_putfn,0000000
+        dap r_putfn
+        lac u_putfn
+w_10165,dac u_t
+w_10166,law i 04
+w_10167,dac u_t1
+w_10170,lac i u_t
+w_10171,dac x_lnk
+        scr 9s
+w_10172,sad u_o40
+w_10173,jmp r_putfn
+w_10174,jda u_putc
+w_10175,lac i u_t
+w_10176,and u_o177
+w_10177,sad u_o40
+w_10200,jmp r_putfn
+w_10201,jda u_putc
+w_10202,idx u_t
+        sza i
+        jmp w_10204
+w_10203,idx u_t1
+        sza
+w_10204,jmp w_10170
+w_10205,jmp r_putfn
+u_done, lac u_noc
+w_10207,sza i
+w_10210,cal 016
+w_10211,and u_d1
+w_10212,sza i
+        jmp s_10212
+        cla
+        jmp w_10214
+s_10212,cla
+w_10213,jmp w_10216
+w_10214,jda u_putc
+w_10215,jmp u_done
+w_10216,lac u_noc
+w_10217,dzm x_lnk
+        lio x_lnk
+        ril 1s
+        rcr 1s
+        dio x_lnk
+w_10220,dac w_10224
+w_10221,lac u_fo
+w_10222,cal 05
+w_10223,w_10345
+w_10224,0010000
+w_10225,cal 016
+u_readdir,0000000
+        dap r_readdir
+        lac u_readdir
+w_10227,lac u_fi
+w_10230,cal 04
+w_10231,x_end
+w_10232,0004000
+w_10233,sad w_10232
+w_10234,jmp u_toobig
+w_10235,dac x_lnk
+        scr 3s
+w_10236,cma
+        sub [1]
+w_10237,add u_d1
+w_10240,dac u_ndir
+w_10241,jmp r_readdir
+u_findf,0000000
+        dap r_findf
+        lac u_findf
+w_10243,law x_end
+w_10244,dac u_t
+w_10245,lac u_ndir
+w_10246,dac u_t1
+w_10247,lac i u_t
+w_10250,sza i
+w_10251,jmp w_10265
+w_10252,dac x_ac
+        idx u_t
+        sza
+        jmp s_10252
+        lac x_ac
+        jmp w_10254
+s_10252,lac x_ac
+w_10253,lac i u_t
+w_10254,cma
+        sub [1]
+w_10255,add u_maxfn
+w_10256,sma i
+w_10257,jmp w_10266
+w_10260,lac u_t
+w_10261,dac u_maxfp
+w_10262,lac i u_t
+w_10263,dac u_maxfn
+w_10264,sma spa i
+        jmp w_10266
+w_10265,dac x_ac
+        idx u_t
+        sza
+        jmp s_10265
+        lac x_ac
+        jmp w_10267
+s_10265,lac x_ac
+w_10266,lac u_t
+w_10267,add u_d7
+w_10270,dac u_t
+w_10271,idx u_t1
+        sza
+w_10272,jmp w_10247
+w_10273,lac u_maxfp
+w_10274,dac 010
+w_10275,idx 010
+        lac i 010
+w_10276,dac u_maxfn+01
+w_10277,idx 010
+        lac i 010
+w_10300,dac u_maxfn+02
+w_10301,idx 010
+        lac i 010
+w_10302,dac u_maxfn+03
+w_10303,jmp r_findf
+u_putc, 0000000
+        dap r_putc
+        lac u_putc
+w_10305,and u_o177
+w_10306,dac w_10341
+w_10307,lac u_opt
+w_10310,dac w_10340
+w_10311,add u_o400000
+w_10312,dac u_opt
+w_10313,sma i
+w_10314,jmp w_10320
+w_10315,lac i w_10340
+w_10316,xor w_10341
+w_10317,jmp w_10322
+w_10320,lac w_10341
+w_10321,dac x_lnk
+        ral 9s
+        and [0777000]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000777]
+        ior x_t
+w_10322,dac i w_10340
+w_10323,dac x_ac
+        idx u_noc
+        sza
+        jmp s_10323
+        lac x_ac
+        jmp w_10325
+s_10323,lac x_ac
+w_10324,lac u_noc
+w_10325,sad u_d128
+w_10326,sma spa
+w_10327,jmp r_putc
+w_10330,lac u_fo
+w_10331,cal 05
+w_10332,w_10345
+w_10333,0000100
+w_10334,lac u_iopt
+w_10335,dac u_opt
+w_10336,dzm u_noc
+w_10337,jmp r_putc
+w_10340,0000000
+w_10341,0000000
+u_fi,   0000000
+u_opt,  w_10345
+u_iopt, w_10345
+w_10345,
+        table 0100, 0
+u_noc,  0000000
+u_fo,   0000001
+u_longflg,0000000
+u_d1,   0000001
+u_d5,   0000005
+u_o60,  0000060
+u_o40,  0000040
+u_o20,  0000020
+u_d7,   0000007
+u_o400000,0400000
+u_d128, 0000200
+u_d4,   0000004
+u_dm4,  0777773
+u_o177, 0000177
+u_o200000,0200000
+u_dd,   0056056
+w_10465,0040040
+w_10466,0040040
+w_10467,0040040
+u_ali,  0154151
+u_t,
+        .+01/
+u_t1,
+        .+01/
+u_maxfn,
+        .+04/
+u_maxfp,
+        .+01/
+u_ndir,
+        .+01/
+u_s_flags,
+        .+010/
+u_s_uid,
+        .+01/
+u_s_nlinks,
+        .+01/
+u_s_size,
+        .+02/
+u_s_i,
+        .+01/
+x_end,
+0110/
+r_longout,jmp 0
+r_octal,jmp 0
+r_putfn,jmp 0
+r_readdir,jmp 0
+r_findf,jmp 0
+r_putc, jmp 0
+        constants
+start 020000

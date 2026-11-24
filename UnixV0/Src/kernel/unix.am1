@@ -1,0 +1,35 @@
+Unix kernel
+
+// The Unix kernel for the PDP-1D, 1970's PDP-7 kernel (s1.s to s8.s)
+// rewritten in am1, in the same division into parts.
+// Bank 0 is the kernel, bank 1 its buffers, banks 2 to 017 the processes,
+// each with a system call frame at its 0100.
+// The kernel runs with the window open.
+// It is assembled from this directory's unix.ah, then s1.ac to s8.ac, with
+// dsp.ac (the display) and chrono.ac (the time).
+//
+// 20-Nov-2026, Claude: the cold start, the system call entry and exit, getuid and exit.
+// 20-Nov-2026, Claude: the drum driver, the cache, the file system and its calls; init from the drum.
+// 20-Nov-2026, Claude: the cache ordered by pointers, blocks read where they lie (dskget), a block at a time in iread.
+// 20-Nov-2026, Claude: the break routine, the clock and the time, the typewriter's messages.
+// 20-Nov-2026, Claude: the processes (fork, exit, smes, rmes, swap, preemption) and the DCS2 terminals and paper tape.
+// 21-Nov-2026, Claude: the display layer, capt and rele on the Type 340.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+
+#include "unix.ah"
+#include "s1.ac"
+#include "s2.ac"
+#include "s3.ac"
+#include "s4.ac"
+#include "s5.ac"
+#include "s6.ac"
+#include "s7.ac"
+#include "dsp.ac"
+#include "chrono.ac"
+#include "s8.ac"
+#include <TYO/typetext.ac>
+
+constants
+assert . <= 07750, "the kernel runs into the read-in loader"
+
+start 0100

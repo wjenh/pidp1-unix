@@ -1,0 +1,472 @@
+// The kernel's sixth part, after 1970's s6.s, with the i-node and the
+// directory entry, the file's blocks, and reading and writing a file.
+// Bank 0, the window open.
+// Needs unix.ah.
+// As in 1970, iget and iput share their words (igBlk, igPtr), and so do
+// dget and dput (dgBlk, dgPtr), so an iput writes back the last iget's
+// i-node.
+
+// Empty the loaded file (s6.s:320-357).
+// Every block is freed, the indirect blocks' blocks too, and the large flag
+// is cleared.
+// The size is the caller's to set.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+itrunc, 0
+        dap itX
+        law i NDSKPS
+        dac itN
+        lac [iDskps]
+        dac itP
+it1,    lac i itP
+        sza i               // skip if a block is there
+        jmp it4
+        lac iFlags
+        and [ILARGE]
+        sza i               // skip if large, when this is an indirect block
+        jmp it3
+        law i BLKW
+        dac itM
+        lac [dskbuf]
+        dac itQ
+// free may write a chain block through dskbuf, so the indirect block is
+// read again for every word (dskrd returns at once when it is still there)
+it2,    lac i itP
+        jda dskrd
+        lac i itQ
+        sza                 // skip if no block
+        jda free
+        idx itQ
+        isp itM
+        jmp it2
+it3,    lac i itP
+        jda free
+        dzm i itP
+it4,    idx itP
+        isp itN
+        jmp it1
+        lac iFlags
+        and [0777777-ILARGE]
+        dac iFlags
+itX,    jmp .
+
+// Look up a name in a directory (s6.s:364-417).
+// Entry: AC = the directory's i-number; nmPtr = a 16-bit pointer to the
+//        name's four words, in any bank.
+// Exit: found, a skip, AC = its i-number, dnode and di the entry; not found,
+// or not a directory, no skip and AC = 0.
+// The directory is the loaded i-node.
+// IO is clobbered.
+// Called by jda.
+namei,  0
+        dap nmX
+        lac namei
+        jda iget
+        lac iFlags
+        and [IDIR]
+        sza i               // skip if a directory
+        jmp nmX
+        lac iSize
+        sar 3s              // the entries
+        sza i               // skip if any
+        jmp nmX
+        cma
+        dac nmN
+        dzm di
+nm1,    lac di
+        jda dget
+        lac dI
+        sza i               // skip if in use
+        jmp nm2
+        lac nmPtr
+        dac nmQ
+        lac dName
+        sas i nmQ           // skip if the same
+        jmp nm2
+        idx nmQ
+        lac dName+1
+        sas i nmQ
+        jmp nm2
+        idx nmQ
+        lac dName+2
+        sas i nmQ
+        jmp nm2
+        idx nmQ
+        lac dName+3
+        sas i nmQ
+        jmp nm2
+        idx nmX
+        lac dI
+        jmp nmX
+nm2,    idx di
+        isp nmN
+        jmp nm1
+        cla
+nmX,    jmp .
+
+// Load an i-node into inode (s6.s:422-437).
+// I-number n is the (n mod 5)th of block n / 5 + 2.
+// It is read where it lies (dskget), so dskbuf is left alone.
+// Entry: AC = the i-number.
+// Exit: ii = it; igBlk and igPtr its block and the place it will have in
+// dskbuf when iput reads the block there.
+// AC and IO are clobbered.
+// Called by jda.
+iget,   0
+        dap igX
+        lac iget
+        dac ii
+        lio iget
+        cla
+        scl 1s              // div wants the dividend shifted left one
+        div [INOPB]
+        hlt                 // never, since the divisor is not 0
+        add [INODEB]
+        dac igBlk
+        dio igPtr           // the remainder, the i-node in its block
+        lac igPtr
+        mul [INOSZ]
+        scr 1s
+        dio igPtr           // its first word in the block
+        lac igBlk
+        jda dskget
+        add igPtr
+        dac cpSrc
+        lac igPtr
+        add [dskbuf]
+        dac igPtr
+        lac [inode]
+        dac cpDst
+        law INOSZ
+        jda copy
+igX,    jmp .
+
+// Write inode back to its block, if it differs there (s6.s:439-474).
+// The comparison is made where the block lies (dskget), and the block is
+// read into dskbuf only to be written.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+iput,   0
+        dap ipX
+        lac igBlk
+        jda dskget
+        sub [dskbuf]
+        add igPtr
+        dac ipD
+        lac [inode]
+        dac ipS
+        law i INOSZ
+        dac ipN
+ip1,    lac i ipS
+        sas i ipD           // skip if the same
+        jmp ip2
+        idx ipS
+        idx ipD
+        isp ipN
+        jmp ip1
+        jmp ipX
+ip2,    lac igBlk
+        jda dskrd
+        lac [inode]
+        dac cpSrc
+        lac igPtr
+        dac cpDst
+        law INOSZ
+        jda copy
+        lac igBlk
+        jda dskwr
+ipX,    jmp .
+
+// Load the loaded directory's entry di into dnode (s6.s:480-500).
+// An entry past the end makes the directory longer, free.
+// It is read where it lies (dskget).
+// Entry: AC = the entry's number.
+// Exit: di = it; dgBlk and dgPtr its block and the place it will have in
+// dskbuf when dput reads the block there.
+// AC and IO are clobbered.
+// Called by jda.
+dget,   0
+        dap dgX
+        lac dget
+        dac di
+        ral 3s              // its first word in the directory
+        dac dgW
+        jda pget
+        dac dgBlk
+        jda dskget
+        dac cpSrc
+        lac dgW
+        and [077]
+        add cpSrc
+        dac cpSrc
+        lac dgW
+        and [077]
+        add [dskbuf]
+        dac dgPtr
+        lac [dnode]
+        dac cpDst
+        law DIRSZ
+        jda copy
+        lac dgW
+        add [DIRSZ]
+        dac dgW
+        lac iSize
+        sub dgW
+        sma                 // skip if the entry ends past the size
+        jmp dgX
+        lac dgW
+        jda dacisize
+        dzm dI
+dgX,    jmp .
+
+// Write dnode back to its block (s6.s:503-511).
+// Exit: AC and IO are clobbered.
+// Called by jda.
+dput,   0
+        dap dpX
+        lac dgBlk
+        jda dskrd
+        lac [dnode]
+        dac cpSrc
+        lac dgPtr
+        dac cpDst
+        law DIRSZ
+        jda copy
+        lac dgBlk
+        jda dskwr
+dpX,    jmp .
+
+// The block holding a word of the loaded file, allocated if there is none
+// (s6.s:520-583).
+// A small file names its seven blocks in iDskps.
+// Past seven it becomes large, iDskps naming indirect blocks of 64 block
+// numbers, the first holding the seven.
+// Past seven indirect blocks, the halt HBIG.
+// Entry: AC = the word's offset, 0 or more.
+// Exit: AC = the block number.
+// IO is clobbered.
+// Called by jda.
+pget,   0
+        dap pgX
+        lac pget
+        sar 6s              // the file's block
+        dac pgN
+        lac iFlags
+        and [ILARGE]
+        sza
+        jmp pg2
+        lac pgN
+        sub [NDSKPS]
+        sma                 // skip if one of the seven
+        jmp pg1
+        lac pgN
+        add [iDskps]
+        dac pgP
+        lac i pgP
+        sza                 // skip if none yet
+        jmp pgX
+        jda alloc
+        dac i pgP
+pgX,    jmp .
+// at the eighth block the seven move to a new indirect block, which alloc
+// has zeroed in dskbuf
+pg1,    jda alloc
+        dac pgI
+        lac [iDskps]
+        dac cpSrc
+        lac [dskbuf]
+        dac cpDst
+        law NDSKPS
+        jda copy
+        lac pgI
+        jda dskwr
+        lac pgI
+        dac iDskps
+        lac [iDskps+1]
+        dac cpDst
+        law NDSKPS-1
+        jda copyz
+        lac iFlags
+        xor [ILARGE]
+        dac iFlags
+pg2,    lac pgN
+        sar 6s              // the indirect block
+        sub [NDSKPS]
+        spa                 // skip if past the seventh
+        jmp pg3
+        law HBIG
+        jmp halt
+pg3,    add [iDskps+NDSKPS]
+        dac pgP
+        lac i pgP
+        sza                 // skip if none yet
+        jmp pg4
+        jda alloc
+        dac i pgP
+pg4,    dac pgI
+        jda dskget          // the indirect block, where it lies
+        dac pgP
+        lac pgN
+        and [077]
+        add pgP
+        dac pgP
+        lac i pgP
+        sza                 // skip if none yet
+        jmp pgX
+        jda alloc           // which leaves its zeros in dskbuf
+        dac pgD
+        lac pgI
+        jda dskrd
+        lac pgN
+        and [077]
+        add [dskbuf]
+        dac pgP
+        lac pgD
+        dac i pgP
+        lac pgI
+        jda dskwr
+        lac pgD
+        jmp pgX
+
+// Read or write the loaded file (s6.s:589-670), between it and any bank.
+// A read moves the count's words or to the end of the file, whichever is
+// fewer.
+// A write moves them up to MAXSIZE, and makes the file longer.
+// As 1970, a count past the end at an offset past the end is taken whole.
+// Entry: AC = the offset in the file; rwBase = a 16-bit pointer to the
+//        words; rwCount = their count, 0 or more.
+// Exit: AC = the words moved.
+// IO is clobbered.
+// iwrite and iread are each called by jda.
+iwrite, 0
+        dap irX
+        law 1
+        dac rwMode
+        lac iwrite
+        jmp ir0
+iread,  0
+        dap irX
+        dzm rwMode
+        lac iread
+ir0,    dac rwOff
+        lac rwMode
+        sza                 // skip for a read
+        jmp ir1
+        lac iSize
+        jmp ir2
+ir1,    lac [MAXSIZE]
+ir2,    sub rwOff           // the words to the limit
+        spa                 // skip unless past it
+        jmp ir3
+        dac rwN
+        lac rwCount
+        sub rwN
+        sma                 // skip if the count is fewer
+        jmp ir4
+ir3,    lac rwCount
+        dac rwN
+ir4,    lac rwN
+        sza i               // skip if there are words to move
+        jmp irX
+        dac rwCnt           // the words still to move
+// a block at a time, a read taking the block where it lies (dskget), a
+// write going through dskbuf and written at once, as 1970 wrote each block
+rw1,    lac rwOff
+        jda pget
+        dac rwBlk
+        lac rwMode
+        sza                 // skip for a read
+        jmp rw2
+        lac rwBlk
+        jda dskget
+        jmp rw3
+rw2,    lac rwBlk
+        jda dskrd
+        lac [dskbuf]
+rw3,    dac rwP
+        lac rwOff
+        and [077]
+        add rwP
+        dac rwP             // the first word to move
+        lac rwOff           // the run, to the block's end or the count's
+        and [077]
+        sub [BLKW]
+        cma
+        dac rwRun
+        lac rwCnt
+        sub rwRun
+        sma                 // skip if the count's end comes first
+        jmp rw4
+        lac rwCnt
+        dac rwRun
+rw4,    lac rwMode
+        sza                 // skip for a read
+        jmp rw5
+        lac rwP
+        dac cpSrc
+        lac rwBase
+        dac cpDst
+        jmp rw6
+rw5,    lac rwBase
+        dac cpSrc
+        lac rwP
+        dac cpDst
+rw6,    lac rwRun
+        jda copy
+        lac rwBase
+        add rwRun
+        dac rwBase
+        lac rwOff
+        add rwRun
+        dac rwOff
+        lac rwMode
+        sza i               // skip for a write
+        jmp rw7
+        lac rwBlk
+        jda dskwr
+rw7,    lac rwCnt
+        sub rwRun
+        dac rwCnt
+        sza                 // skip when all are moved
+        jmp rw1
+        lac rwMode
+        sza i               // skip for a write
+        jmp rwEnd
+        lac iSize
+        sub rwOff
+        sma                 // skip if the write ended past the size
+        jmp rwEnd
+        lac rwOff
+        dac iSize
+rwEnd,  lac rwN
+irX,    jmp .
+
+// The open file uAc names, loaded, fnode its open file words and inode its
+// i-node (s6.s:677-686).
+// A bad or closed descriptor is error.
+// Exit: AC and IO are clobbered.
+// Called by jda.
+finac,  0
+        dap fiX
+        lac uAc
+        jda fget
+        jmp error
+        lac fFlags
+        sma                 // skip if open
+        jmp error
+        lac fI
+        jda iget
+fiX,    jmp .
+
+// The loaded i-node's size set and the i-node written (s6.s:689-693).
+// Entry: AC = the size.
+// Exit: AC = the size.
+// IO is clobbered.
+// Called by jda.
+dacisize, 0
+        dap dzX
+        lac dacisize
+        dac iSize
+        jda iput
+        lac iSize
+dzX,    jmp .

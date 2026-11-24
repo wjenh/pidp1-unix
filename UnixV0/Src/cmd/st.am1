@@ -1,0 +1,3071 @@
+st
+// Translated by as7am1 from the PDP-7 source cmd/st1.s cmd/st2.s cmd/st3.s cmd/st4.s cmd/fop.s cmd/st5.s cmd/st6.s cmd/st7.s
+// for a process bank.
+// Its layout is word 0 the jump to the start, 020-077 the translator's words, 0100-0107
+// the system call frame, the routines' returns and the constants from 0110 (laid down at
+// the end), then the program.
+// 23-Nov-2026, Claude: comments cleaned for the release.
+#include "unixsys.ah"
+// by hand: the 340's command words, for the display (st7.s's list, rewritten below)
+#include <TYPE340/type340cmds.ah>
+// by hand: the game's pace, ST_K, is k of 1970's one-second steps in each frame, the ship
+// taking one step of k seconds; 1 (1970's words) or 3.
+// The constants for 3 are scaled from 1970's below.
+#ifndef ST_K
+#define ST_K 3
+#endif
+        octal
+        bank 2
+0/
+        jmp u_start
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+        0
+020/
+x_lnk,  0       // the link, in its sign
+x_ac,   0
+x_io,   0
+x_t,    0
+// by hand: the display's words, from 024
+h_t,    0       // temporaries
+h_t2,   0
+h_lim1, 0       // the first word past the room of the list being built
+h_y,    0       // a planet's place on the screen, for dsplanet
+h_x,    0
+h_cur,  0       // 0 while list A is shown and B built, else the other way
+h_cw,   0       // characters packed for the 340, three to a word
+h_cn,   0       // how many are in h_cw
+h_tpt,  0       // a text's pointer and count
+h_tcn,  0
+h_pbs,  0       // the push buttons, 1970's pbsflgs, bit n for button n
+h_now,  0       // the time's low word, in sixtieths
+h_tpen, 0       // when the pen last hit a button
+h_pen,  0       // that button's bit
+h_sup,  0       // nonzero from a reset by SS5 and SS6 until both are off
+h_ytop, 01777   // the view's top row, which inscr's offsets count down from
+h_xr,   01577   // the view's right column
+h_y250, 0d250   // the speed line's row
+h_vis,  0200000 // a visible vector; button 1's bit
+h_dn,   0100000 // a vector down
+h_lf,   0200    // a vector left
+h_m7b,  0177    // a vector's length
+h_o100, 0100
+h_o37,  037     // the 340's end character
+h_o777, 0777
+h_m6,   077     // sense switches 1 to 6, in word 4
+h_m4,   074     // switches 1 to 4
+h_m17,  0377777
+h_top,  07777   // the bank's last word
+
+// updacc's early return taken as soon as the body's offset from the ship is known, before
+// the squares and the sqrt, when it is above fardst (2^15) in x or in y (h_fbg), so that
+// dpar would pass fardst and st2.s:190-198 return.
+// It is not taken for the sun, which never returns there, nor for par or locpar, whose
+// dpar is read after.
+// What it skips, dpar, dtmp1, ftmp1 and the floating accumulator, is written before it is
+// read for such a body.
+// It is here, in the words below 0100, to keep the lists' room.
+// Entry: cplan, absx and absy, after absy is stored.
+// Exit: to updacc's early return (w_11010) for a far body, else back.
+// AC and IO are clobbered.
+// Called via jsp.
+h_far,  dap h_fax
+        lac u_cplan
+        sza i
+        jmp h_fax               // the sun
+        sad u_par
+        jmp h_fax
+        sad u_locpar
+        jmp h_fax
+        lac u_absx
+        lio u_absx+1
+        jda h_fbg
+        lac u_absy
+        lio u_absy+1
+        jda h_fbg
+h_fax,  jmp .
+0100/
+        SYSFRAME()
+0167/
+u_start,law h_pbs
+w_10002,dac u__pbson
+w_10003,lac u_pww
+w_10004,dac w_10013
+w_10005,dac w_10015
+w_10006,lac u_pw
+w_10007,dac w_10025
+w_10010,law i 040
+w_10011,dac u_cplan
+w_10012,jda u_fld
+w_10013,0000000
+w_10014,jda u_fmp
+w_10015,0000000
+w_10016,law i 01
+w_10017,add u_aexp
+w_10020,dac u_aexp
+w_10021,jda u_fng
+w_10022,jda u_fad
+w_10023,u_fpone
+w_10024,jda u_fst
+w_10025,0000000
+w_10026,lac w_10013
+w_10027,add u_d3
+w_10030,dac w_10013
+w_10031,dac w_10015
+w_10032,lac w_10025
+w_10033,add u_d3
+w_10034,dac w_10025
+w_10035,idx u_cplan
+        sza
+w_10036,jmp w_10012
+w_10037,law h_la-1
+w_10040,dac 017
+        lac u_dhalt                     // by hand: the PDP-7's law gave a negative word, true
+w_10041,dac u_lanflg
+w_10042,dzm u_crflg
+w_10043,dzm u_goflg
+w_10044,dzm u__pbsint
+w_10045,dzm u_forflg
+w_10046,dzm u_bacflg
+w_10047,dzm u_dspflg
+w_10050,dzm u_locflg
+w_10051,dzm u_locpar
+w_10052,lac u_d1
+w_10053,dac u_par
+w_10054,jda u_dispname
+w_10055,jda u_fld
+w_10056,w_14235
+w_10057,jda u_sqrt
+w_10060,jda u_fst
+w_10061,u_rpar
+w_10062,jda u_fst
+w_10063,u_y
+w_10064,jda u_fst
+w_10065,u_oy
+w_10066,jda u_fld
+w_10067,u_fpone
+w_10070,jda u_fst
+w_10071,u_sphi
+w_10072,jda u_fst
+w_10073,u_stheta
+w_10074,jda u_dspsca
+w_10075,jda u_fld
+w_10076,u_fpzero
+w_10077,jda u_fst
+w_10100,u_x
+w_10101,jda u_fst
+w_10102,u_ox
+w_10103,jda u_fst
+w_10104,u_cphi
+w_10105,jda u_fst
+w_10106,u_ctheta
+w_10107,law h_la
+w_10110,cal 027
+w_10111,jmp u_loop
+u_loop, jda h_lst
+w_10113,jda h_text
+w_10114,jda u_contrl
+w_10115,lac u_par
+w_10116,jda u_absxy
+w_10117,jda u_shipxy
+w_10120,lac u_goflg
+w_10121,sma i
+w_10122,jmp u_loop3
+w_10123,jda u_fld
+w_10124,u_fpzero
+w_10125,jda u_fst
+w_10126,u_ax
+w_10127,jda u_fst
+w_10130,u_ay
+w_10131,jda u_fst
+w_10132,u_maxa
+w_10133,lac u_nplan
+w_10134,sma spa
+u_loop1,lac u_cplan
+w_10136,add u_dm1
+w_10137,sma i
+w_10140,jmp u_loop2
+w_10141,dac u_cplan
+w_10142,add u_fppar
+w_10143,dac u_fcplan
+w_10144,lac i u_fcplan
+w_10145,dac u_fcplan
+w_10146,jda u_updacc
+w_10147,jda u_displa
+w_10150,lac u_cplan
+w_10151,sza
+w_10152,jda u_updpln
+w_10153,lac u_cplan
+w_10154,and u_o7
+w_10155,sad u_o7
+w_10156,jda u_contrl
+w_10157,jmp u_loop1
+u_loop2,lac u_lanflg
+w_10161,sma
+w_10162,jda u_updshp
+u_loop3,jda u_fld
+w_10164,u_horizv
+#if ST_K != 1
+        jda u_fmp                       // by hand: the speed line over k
+        h_thrd
+#endif
+w_10165,lac u_scale
+w_10166,cma
+        sub [1]
+w_10167,add u_vscale
+w_10170,add u_aexp
+w_10171,dac u_aexp
+w_10172,jda u_inscr
+w_10173,jmp u_loop4
+w_10174,add h_xr
+w_10175,dac h_x
+w_10176,lac h_y250
+w_10177,dac h_y
+w_10200,cla
+w_10201,jda u_buf
+u_loop4,cal 017
+w_10203,dzm u_dispcl
+w_10204,lac u_crflg
+w_10205,sma
+w_10206,jmp w_10212
+w_10207,lac u_o20714
+w_10210,dac u_dispcl
+w_10211,jmp w_10217
+w_10212,lac u_lanflg
+w_10213,sma
+w_10214,jmp w_10217
+w_10215,lac u_o114
+w_10216,dac u_dispcl
+w_10217,jda h_lend
+w_10221,jmp u_loop
+u_contrl,0000000
+        dap r_contrl
+        lac u_contrl
+        jda h_rdpb                      // by hand: the pen and the switches as the push buttons
+w_10223,lac i u__pbson
+w_10224,xor u__pbsint
+w_10225,and i u__pbson
+w_10226,sza i
+w_10227,jmp u_noneon
+w_10230,lia
+w_10231,sma i
+        jmp s_10231
+        dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+        jmp w_10233
+s_10231,dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10232,cal 016
+w_10233,sma
+w_10234,jmp w_10237
+w_10235,dzm u_goflg
+w_10236,dzm u_crflg
+w_10237,lai
+w_10240,ral 6s
+        and [0777700]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000077]
+        ior x_t
+w_10241,sma
+        jmp s_10241
+        dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+        jmp w_10243
+s_10241,dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10242,jmp w_10251
+w_10243,sma i
+w_10244,jmp u_noneon
+w_10245,idx u_scale
+        sza
+w_10246,nop
+w_10247,jda u_dspsca
+w_10250,jmp u_noneon
+w_10251,sma
+w_10252,jmp u_noneon
+w_10253,law i 01
+w_10254,add u_scale
+w_10255,dac u_scale
+w_10256,jda u_dspsca
+u_noneon,dzm u_forflg
+w_10260,dzm u_bacflg
+w_10261,lac i u__pbson
+w_10262,dac u__pbsint
+w_10263,ral 2s
+        and [0777774]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000003]
+        ior x_t
+w_10264,sma
+w_10265,jmp w_10273
+w_10266,lac u_dhalt
+w_10267,dac u_forflg
+w_10270,lac u_goflg
+w_10271,sma
+w_10272,dzm u_lanflg
+w_10273,lac i u__pbson
+w_10274,ral 3s
+        and [0777770]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000007]
+        ior x_t
+w_10275,sma
+w_10276,jmp w_10304
+w_10277,lac u_dhalt
+w_10300,dac u_bacflg
+w_10301,lac u_goflg
+w_10302,sma
+w_10303,dzm u_lanflg
+w_10304,lac i u__pbson
+w_10305,ral 4s
+        and [0777760]
+        dac x_t
+        lac x_lnk
+        sar 9s
+        sar 8s
+        and [0000017]
+        ior x_t
+w_10306,sma
+w_10307,jmp w_10315
+w_10310,dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10311,sma i
+w_10312,jmp r_contrl
+w_10313,dzm w_15443
+w_10314,jmp w_10322
+w_10315,dio x_io
+        lio x_lnk
+        rcl 1s
+        rir 1s
+        dio x_lnk
+        lio x_io
+w_10316,sma
+w_10317,jmp r_contrl
+w_10320,lac u_dhalt
+w_10321,dac w_15443
+w_10322,jda u_fld
+w_10323,u_cphi
+w_10324,jda u_fmp
+w_10325,u_sdphi
+w_10326,lac w_15443
+w_10327,sma
+w_10330,jda u_fng
+w_10331,jsp h_sf1
+w_10333,jda u_fld
+w_10334,u_sphi
+w_10335,jda u_fmp
+w_10336,u_cdphi
+w_10337,jda u_fad
+w_10340,u_ftmp1
+w_10341,jsp h_sf2
+w_10343,jda u_fld
+w_10344,u_sphi
+w_10345,jda u_fmp
+w_10346,u_sdphi
+w_10347,lac w_15443
+w_10350,sma i
+w_10351,jda u_fng
+w_10352,jsp h_sf1
+w_10354,jda u_fld
+w_10355,u_cphi
+w_10356,jda u_fmp
+w_10357,u_cdphi
+w_10360,jda u_fad
+w_10361,u_ftmp1
+w_10362,jda u_fst
+w_10363,u_cphi
+w_10364,jda u_fld
+w_10365,u_ftmp2
+w_10366,jda u_fst
+w_10367,u_sphi
+w_10370,jmp r_contrl
+u_shipxy,0000000
+        dap r_shipxy
+        lac u_shipxy
+w_10372,jsp h_lax
+w_10374,jda u_fad
+w_10375,u_x
+w_10376,jda u_fng
+w_10377,jda u_fst
+w_10400,u_shipx
+w_10401,jsp h_lay
+w_10403,jda u_fad
+w_10404,u_y
+w_10405,jda u_fng
+w_10406,jda u_fst
+w_10407,u_shipy
+w_10410,jmp r_shipxy
+u_absv, 0000000
+        dap r_absv
+        lac u_absv
+w_10412,dzm u_absx
+w_10413,dzm u_absx+01
+w_10414,dzm u_absx+02
+w_10415,dzm u_absy
+w_10416,dzm u_absy+01
+w_10417,dzm u_absy+02
+w_10420,dac u_absi
+w_10421,sza i
+w_10422,jmp r_absv
+w_10423,add u_fppar
+w_10424,dac w_15443+01
+w_10425,jda u_invert
+w_10426,jsp h_lf1
+w_10430,jda u_fng
+w_10431,jda u_fad
+w_10432,u_absx
+w_10433,jsp h_sax
+w_10435,jda u_fld
+w_10436,u_ftmp2
+w_10437,jda u_fng
+w_10440,jda u_fad
+w_10441,u_absy
+w_10442,jsp h_say
+w_10444,jda u_invert
+w_10445,jsp h_lf1
+w_10447,jda u_fad
+w_10450,u_absx
+w_10451,jsp h_sax
+w_10453,jda u_fld
+w_10454,u_ftmp2
+w_10455,jda u_fad
+w_10456,u_absy
+w_10457,jsp h_say
+w_10461,lac u_absi
+w_10462,add u_ppar
+w_10463,dac w_15443+01
+w_10464,lac i w_15443+01
+w_10465,jmp w_10420
+u_invert,0000000
+        dap r_invert
+        lac u_invert
+w_10467,lac i w_15443+01
+w_10470,dac u_fcplan
+w_10471,add u_pww
+w_10472,dac w_10503
+w_10473,dac w_10506
+w_10474,lac u_fcplan
+w_10475,add u_px
+w_10476,dac w_10511
+w_10477,lac u_fcplan
+w_10500,add u_py
+w_10501,dac w_10515
+w_10502,jda u_fld
+w_10503,0010000
+w_10504,jda u_fng
+w_10505,jda u_fst
+w_10506,0010000
+w_10507,jda u_updpln
+w_10510,jda u_fld
+w_10511,0010000
+w_10512,jsp h_sf1
+w_10514,jda u_fld
+w_10515,0010000
+w_10516,jsp h_sf2
+w_10520,jmp r_invert
+u_updpln,0000000
+        dap r_updpln
+        lac u_updpln
+w_10522,lac u_fcplan
+w_10523,lia
+w_10524,add u_px
+w_10525,dac w_10545
+w_10526,dac w_10564
+w_10527,lai
+w_10530,add u_py
+w_10531,dac w_10555
+w_10532,dac w_10566
+w_10533,dac w_10602
+w_10534,lai
+w_10535,add u_pw
+w_10536,dac w_10551
+w_10537,dac w_10570
+w_10540,lai
+w_10541,add u_pww
+w_10542,dac w_10557
+w_10543,dac w_10576
+w_10544,jda u_fld
+w_10545,0010000
+w_10546,jsp h_sf1
+w_10550,jda u_fmp
+w_10551,0010000
+w_10552,jsp h_sf2
+w_10554,jda u_fld
+w_10555,0010000
+w_10556,jda u_fmp
+w_10557,0010000
+w_10560,jda u_fng
+w_10561,jda u_fad
+w_10562,u_ftmp2
+w_10563,jda u_fst
+w_10564,0010000
+w_10565,jda u_fld
+w_10566,0010000
+w_10567,jda u_fmp
+w_10570,0010000
+w_10571,jsp h_sf2
+w_10573,jsp h_lf1
+w_10575,jda u_fmp
+w_10576,0010000
+w_10577,jda u_fad
+w_10600,u_ftmp2
+w_10601,jda u_fst
+w_10602,0010000
+w_10603,jmp r_updpln
+u_updacc,0000000
+        dap r_updacc
+        lac u_updacc
+w_10605,lac u_cplan
+w_10606,sad u_par
+w_10607,jmp u_upda2
+w_10610,jda u_absxy
+w_10611,jsp h_lax
+w_10613,jda u_fad
+w_10614,u_shipx
+w_10615,jmp w_10621
+u_upda2,jda u_fld
+w_10617,u_x
+w_10620,jda u_fng
+w_10621,jsp h_sax
+w_10623,jda u_fmp
+w_10624,u_absx
+w_10625,jsp h_sf1
+w_10627,lac u_cplan
+w_10630,sad u_par
+w_10631,jmp w_10637
+w_10632,jsp h_lay
+w_10634,jda u_fad
+w_10635,u_shipy
+w_10636,jmp w_10642
+w_10637,jda u_fld
+w_10640,u_y
+w_10641,jda u_fng
+w_10642,jsp h_say
+        jsp h_far               // by hand: a far body's early return
+w_10644,jda u_fmp
+w_10645,u_absy
+w_10646,jda u_fad
+w_10647,u_ftmp1
+w_10650,jda u_fst
+w_10651,u_dtmp1
+w_10652,jda u_sqrt
+w_10653,jda u_fst
+w_10654,u_dpar
+w_10655,lac u_cplan
+w_10656,sad u_par
+w_10657,sma spa
+w_10660,jmp u_upda5
+w_10661,jda u_fld
+w_10662,u_ox
+w_10663,jda u_fng
+w_10664,jda u_fad
+w_10665,u_x
+w_10666,jsp h_sf1
+w_10670,jda u_fmp
+w_10671,u_y
+w_10672,jda u_fst
+w_10673,u_horizv
+w_10674,jda u_fld
+w_10675,u_y
+w_10676,jda u_fng
+w_10677,jda u_fad
+w_10700,u_oy
+w_10701,jsp h_sf2
+w_10703,jda u_fmp
+w_10704,u_x
+w_10705,jda u_fad
+w_10706,u_horizv
+w_10707,jda u_fdv
+w_10710,u_dpar
+w_10711,jda u_fst
+w_10712,u_horizv
+w_10713,jda u_fld
+w_10714,u_dpar
+w_10715,jda u_fcp
+w_10716,u_rpar
+w_10717,sma
+w_10720,jmp u_upda5
+w_10721,lac u_lanflg
+w_10722,sma i
+w_10723,jmp u_upda5
+w_10724,jsp h_lf1
+w_10726,jda u_fmp
+w_10727,u_ftmp1
+w_10730,jsp h_sf1
+w_10732,jda u_fld
+w_10733,u_ftmp2
+w_10734,jda u_fmp
+w_10735,u_ftmp2
+w_10736,jda u_fad
+w_10737,u_ftmp1
+w_10740,jda u_fcp
+w_10741,u_crash
+w_10742,sma i
+w_10743,jmp w_10747
+w_10744,lac u_dhalt
+w_10745,dac u_goflg
+w_10746,dac u_crflg
+w_10747,lac u_dhalt
+w_10750,dac u_lanflg
+w_10751,jda u_fld
+w_10752,u_rpar
+w_10753,jda u_fdv
+w_10754,u_dpar
+w_10755,jsp h_sf1
+w_10757,jda u_fmp
+w_10760,u_x
+w_10761,jda u_fst
+w_10762,u_x
+w_10763,jda u_fst
+w_10764,u_ox
+w_10765,jsp h_lf1
+w_10767,jda u_fmp
+w_10770,u_y
+w_10771,jda u_fst
+w_10772,u_y
+w_10773,jda u_fst
+w_10774,u_oy
+w_10775,lac u_par
+w_10776,jda u_absxy
+w_10777,jda u_shipxy
+w_11000,jmp u_upda2
+u_upda5,jda u_fcp
+w_11002,u_fardst
+w_11003,sma i
+w_11004,jmp w_11013
+w_11005,lac u_cplan
+w_11006,sza i
+w_11007,jmp w_11013
+w_11010,lac u_dhalt
+w_11011,dac u_grvflg
+w_11012,jmp r_updacc
+w_11013,dzm u_grvflg
+w_11014,lac u_fcplan
+w_11015,add u_accl
+w_11016,dac w_11020
+w_11017,jda u_fld
+w_11020,0010000
+w_11021,jda u_fdv
+w_11022,u_dtmp1
+w_11023,jda u_fcp
+w_11024,u_maxa
+w_11025,sma i
+w_11026,jmp w_11033
+w_11027,jda u_fst
+w_11030,u_maxa
+w_11031,lac u_cplan
+w_11032,dac u_maxj
+w_11033,jda u_fdv
+w_11034,u_dpar
+w_11035,jsp h_sf1
+w_11037,jda u_fmp
+w_11040,u_absx
+w_11041,jda u_fad
+w_11042,u_ax
+w_11043,jda u_fst
+w_11044,u_ax
+w_11045,jsp h_lf1
+w_11047,jda u_fmp
+w_11050,u_absy
+w_11051,jda u_fad
+w_11052,u_ay
+w_11053,jda u_fst
+w_11054,u_ay
+w_11055,jmp r_updacc
+u_updshp,0000000
+        dap r_updshp
+        lac u_updshp
+w_11057,lac u_forflg
+w_11060,sma i
+w_11061,jmp w_11065
+w_11062,lac u_bacflg
+w_11063,sma
+w_11064,jmp w_11135
+w_11065,jda u_fld
+#if ST_K == 1
+w_11066,u_ascale
+#else
+w_11066,h_asc                           // by hand: the thrust times k^2
+#endif
+w_11067,lac u_forflg
+w_11070,sma
+w_11071,jmp w_11100
+w_11072,lac u_bacflg
+w_11073,sma
+w_11074,jmp w_11101
+w_11075,jda u_fld
+w_11076,u_fpzero
+w_11077,jmp w_11107
+w_11100,jda u_fng
+w_11101,lac u_scale
+w_11102,add u_aexp
+w_11103,dac u_aexp
+w_11104,lac u_forflg
+w_11105,sma
+w_11106,jmp w_11111
+w_11107,lac u_accflg
+w_11110,sma
+w_11111,jmp w_11114
+w_11112,jda u_fad
+w_11113,u_maxa
+w_11114,jda u_fng
+w_11115,jsp h_sf1
+w_11117,jda u_fmp
+w_11120,u_ctheta
+w_11121,jda u_fad
+w_11122,u_ax
+w_11123,jda u_fst
+w_11124,u_ax
+w_11125,jsp h_lf1
+w_11127,jda u_fmp
+w_11130,u_stheta
+w_11131,jda u_fad
+w_11132,u_ay
+w_11133,jda u_fst
+w_11134,u_ay
+w_11135,jda u_fld
+w_11136,u_ox
+w_11137,jda u_fng
+w_11140,jda u_fad
+w_11141,u_ax
+w_11142,jsp h_sf1
+w_11144,jda u_fld
+w_11145,u_x
+w_11146,lac u_aexp
+w_11147,add u_d1
+w_11150,dac u_aexp
+w_11151,jda u_fad
+w_11152,u_ftmp1
+w_11153,jsp h_sf1
+w_11155,jda u_fld
+w_11156,u_x
+w_11157,jda u_fst
+w_11160,u_ox
+w_11161,jsp h_lf1
+w_11163,jda u_fst
+w_11164,u_x
+w_11165,jda u_fld
+w_11166,u_oy
+w_11167,jda u_fng
+w_11170,jda u_fad
+w_11171,u_ay
+w_11172,jsp h_sf1
+w_11174,jda u_fld
+w_11175,u_y
+w_11176,lac u_aexp
+w_11177,add u_d1
+w_11200,dac u_aexp
+w_11201,jda u_fad
+w_11202,u_ftmp1
+w_11203,jsp h_sf1
+w_11205,jda u_fld
+w_11206,u_y
+w_11207,jda u_fst
+w_11210,u_oy
+w_11211,jsp h_lf1
+w_11213,jda u_fst
+w_11214,u_y
+w_11215,lac u_par
+w_11216,sad u_maxj
+w_11217,jmp r_updshp
+w_11220,jda u_absxy
+w_11221,jda u_shipxy
+w_11222,lac u_par
+w_11223,jda u_absv
+w_11224,jda u_fld
+w_11225,u_ox
+w_11226,jda u_fng
+w_11227,jda u_fad
+w_11230,u_x
+w_11231,jda u_fad
+w_11232,u_absx
+w_11233,jda u_fst
+w_11234,u_ox
+w_11235,jda u_fld
+w_11236,u_oy
+w_11237,jda u_fng
+w_11240,jda u_fad
+w_11241,u_y
+w_11242,jda u_fad
+w_11243,u_absy
+w_11244,jda u_fst
+w_11245,u_oy
+w_11246,lac u_maxj
+w_11247,dac u_par
+w_11250,jda u_absv
+w_11251,jda u_fld
+w_11252,u_ox
+w_11253,jda u_fng
+w_11254,jda u_fad
+w_11255,u_absx
+w_11256,jda u_fst
+w_11257,u_ox
+w_11260,jda u_fld
+w_11261,u_oy
+w_11262,jda u_fng
+w_11263,jda u_fad
+w_11264,u_absy
+w_11265,jda u_fst
+w_11266,u_oy
+w_11267,lac u_par
+w_11270,jda u_absxy
+w_11271,jsp h_lax
+w_11273,jda u_fad
+w_11274,u_shipx
+w_11275,jda u_fng
+w_11276,jda u_fst
+w_11277,u_x
+w_11300,jda u_fad
+w_11301,u_ox
+w_11302,jda u_fst
+w_11303,u_ox
+w_11304,jsp h_lay
+w_11306,jda u_fad
+w_11307,u_shipy
+w_11310,jda u_fng
+w_11311,jda u_fst
+w_11312,u_y
+u_fadins,jda u_fad
+w_11314,u_oy
+w_11315,jda u_fst
+w_11316,u_oy
+w_11317,lac u_par
+w_11320,add u_fppar
+w_11321,dac w_11326
+w_11322,lac i w_11326
+w_11323,add u_prsq
+w_11324,dac w_11326
+w_11325,jda u_fld
+w_11326,0010000
+w_11327,jda u_sqrt
+w_11330,jda u_fst
+w_11331,u_rpar
+w_11332,jda u_dspsca
+w_11333,lac u_par
+w_11334,jda u_dispname
+w_11335,jmp r_updshp
+u_inscr,0000000
+        dap r_inscr
+        lac u_inscr
+w_11337,jda u_fng
+w_11340,jda u_fix
+w_11341,add u_d383
+w_11342,sma i
+w_11343,jmp r_inscr
+w_11344,add u_dm768
+w_11345,sma
+w_11346,jmp r_inscr
+w_11347,dac x_ac
+        idx r_inscr
+        lac x_ac
+w_11350,jmp r_inscr
+u_absxy,0000000
+        dap r_absxy
+        lac u_absxy
+w_11352,sza i
+w_11353,jmp w_11420
+w_11354,lia
+w_11355,lac u_fldins
+w_11356,dac w_11374-01
+w_11357,dac w_11405-01
+w_11360,lai
+w_11361,dac u_absi
+w_11362,sza i
+w_11363,jmp r_absxy
+w_11364,add u_fppar
+w_11365,dac w_15443+02
+w_11366,lac i w_15443+02
+w_11367,add u_px
+w_11370,dac w_11374
+u_fldins,jda u_fld
+w_11372,u_absx
+w_11373,jda u_fad
+w_11374,0010000
+w_11375,jsp h_sax
+w_11377,lac i w_15443+02
+w_11400,add u_py
+w_11401,dac w_11405
+w_11402,jsp h_lay
+w_11404,jda u_fad
+w_11405,0010000
+w_11406,jsp h_say
+w_11410,lac u_fadins
+w_11411,dac w_11374-01
+w_11412,dac w_11405-01
+w_11413,lac u_absi
+w_11414,add u_ppar
+w_11415,dac w_15443+02
+w_11416,lac i w_15443+02
+w_11417,jmp w_11361
+w_11420,dzm u_absx
+w_11421,dzm u_absx+01
+w_11422,dzm u_absx+02
+w_11423,dzm u_absy
+w_11424,dzm u_absy+01
+w_11425,dzm u_absy+02
+w_11426,jmp r_absxy
+u_displa,0000000
+        dap r_displa
+        lac u_displa
+w_11430,lac u_locpar
+w_11431,sad u_cplan
+w_11432,sma spa
+w_11433,jmp w_11511
+w_11434,lac u_locflg
+w_11435,sma
+w_11436,jmp w_11501
+w_11437,jda u_fld
+w_11440,u_cphi
+w_11441,jda u_fmp
+w_11442,u_absy
+w_11443,jsp h_sf1
+w_11445,jda u_fld
+w_11446,u_sphi
+w_11447,jda u_fmp
+w_11450,u_absx
+w_11451,jda u_fad
+w_11452,u_ftmp1
+w_11453,jda u_fdv
+w_11454,u_dpar
+w_11455,jda u_fst
+w_11456,u_stheta
+w_11457,jda u_fld
+w_11460,u_sphi
+w_11461,jda u_fmp
+w_11462,u_absy
+w_11463,jda u_fng
+w_11464,jsp h_sf1
+w_11466,jda u_fld
+w_11467,u_cphi
+w_11470,jda u_fmp
+w_11471,u_absx
+w_11472,jda u_fad
+w_11473,u_ftmp1
+w_11474,jda u_fdv
+w_11475,u_dpar
+w_11476,jda u_fst
+w_11477,u_ctheta
+w_11500,jmp w_11511
+w_11501,jda u_fld
+w_11502,u_sphi
+w_11503,jda u_fst
+w_11504,u_stheta
+w_11505,jda u_fld
+w_11506,u_cphi
+w_11507,jda u_fst
+w_11510,u_ctheta
+w_11511,jsp h_lax
+w_11513,jda u_sfmp
+w_11514,u_ctheta
+w_11515,jsp h_sf1
+w_11517,jsp h_lay
+w_11521,jda u_sfmp
+w_11522,u_stheta
+w_11523,jda u_fad
+w_11524,u_ftmp1
+w_11525,lac u_aexp
+w_11526,cma
+        sub [1]
+w_11527,add u_scale
+w_11530,cma
+        sub [1]
+w_11531,dac u_aexp
+w_11532,jda u_fst
+w_11533,u_spy
+w_11534,dzm u_inflg
+w_11535,jda u_inscr
+w_11536,jmp w_11552
+w_11537,add h_ytop
+w_11540,dac h_y
+w_11541,jda u_rotx
+w_11542,lac u_dhalt
+w_11543,dac u_inflg
+w_11544,jda u_inscr
+w_11545,jmp w_11552
+w_11546,add h_xr
+w_11547,dac h_x
+w_11550,lac u_cplan
+w_11551,jda u_buf
+w_11552,jda u_drcirc
+w_11553,jmp r_displa
+u_rotx, 0000000
+        dap r_rotx
+        lac u_rotx
+w_11555,jsp h_lax
+w_11557,jda u_sfmp
+w_11560,u_stheta
+w_11561,jsp h_sf1
+w_11563,jsp h_lay
+w_11565,jda u_sfmp
+w_11566,u_ctheta
+w_11567,jda u_fng
+w_11570,jda u_fad
+w_11571,u_ftmp1
+w_11572,lac u_aexp
+w_11573,cma
+        sub [1]
+w_11574,add u_scale
+w_11575,cma
+        sub [1]
+w_11576,dac u_aexp
+w_11577,jda u_fst
+w_11600,u_spx
+w_11601,jmp r_rotx
+u_surf, 0000000
+        dap r_surf
+        lac u_surf
+w_11603,law i 01
+w_11604,add u_setx
+w_11605,cma
+        sub [1]
+w_11606,dac u_tsetx
+w_11612,law i 01
+w_11613,add u_sety
+w_11614,cma
+        sub [1]
+w_11615,dac u_tsety
+// by hand: the arc's start for the 340 (st4.s:88-97).
+// It is a parameter word, the row, the column with vector mode next, when they, one vector
+// and the end word fit; else the arc is not drawn, returning as if off the screen.
+w_11607,law 4
+        jda h_room
+        jmp h_sfn
+        lac h_pcir
+        jda h_put
+        lac u_sety
+        add h_ytop
+        ior h_ybit
+        jda h_put
+        lac u_setx
+        add h_xr
+        ior h_nxvec
+        jda h_put
+w_11621,lac u_narcs
+w_11622,dac u_nt
+w_11623,jda u_fld
+w_11624,u_wx
+w_11625,jda u_fst
+w_11626,u_twx
+w_11627,jda u_fld
+w_11630,u_wy
+w_11631,jda u_fst
+w_11632,u_twy
+w_11633,jda u_fld
+w_11634,u_v
+w_11635,jda u_fng
+w_11636,jda u_fst
+w_11637,u_v
+w_11640,jda u_fld
+w_11641,u_v
+w_11642,jda u_sfmp
+w_11643,u_twy
+w_11644,jda u_fng
+w_11645,jsp h_sf1
+w_11647,jda u_fld
+w_11650,u_vv
+w_11651,jda u_sfmp
+w_11652,u_twx
+w_11653,jda u_fad
+w_11654,u_ftmp1
+w_11655,jsp h_sf2
+w_11657,jda u_fld
+w_11660,u_v
+w_11661,jda u_sfmp
+w_11662,u_twx
+w_11663,jsp h_sf1
+w_11665,jda u_fld
+w_11666,u_vv
+w_11667,jda u_sfmp
+w_11670,u_twy
+w_11671,jda u_fad
+w_11672,u_ftmp1
+w_11673,jda u_fst
+w_11674,u_twy
+w_11675,jda u_fad
+w_11676,u_spy
+w_11677,jda u_inscr
+w_11700,jmp w_11747
+w_11701,add u_tsety
+w_11702,dac u_dely
+w_11703,cma
+        sub [1]
+w_11704,add u_d1
+w_11705,add u_tsety
+w_11706,dac u_tsety
+w_11707,jda u_fld
+w_11710,u_ftmp2
+w_11711,jda u_fst
+w_11712,u_twx
+w_11713,jda u_fad
+w_11714,u_spx
+w_11715,jda u_inscr
+w_11716,jmp w_11747
+w_11717,add u_tsetx
+w_11720,dac u_delx
+w_11721,cma
+        sub [1]
+w_11722,add u_d1
+w_11723,add u_tsetx
+w_11724,dac u_tsetx
+// by hand: the segment as a 340 vector word (st4.s:144-158, the GRAPHIC-2's short
+// vector), when it and the end word fit; else the arc ends here, as if done.
+w_11725,law 2
+        jda h_room
+        jmp w_11746
+        jda h_vw
+w_11744,idx u_nt
+        sza
+w_11745,jmp w_11640
+// by hand: each way out after the start ends the vectors with the end word, a zero
+// move; room for it was counted with the start and with each vector.
+w_11746,lac u_dhalt
+        jda h_put
+        jmp r_surf
+w_11747,lac u_dhalt
+        jda h_put
+h_sfn,  idx r_surf
+w_11750,jmp r_surf
+u_drcirc,0000000
+        dap r_drcirc
+        lac u_drcirc
+w_11752,lac u_grvflg
+w_11753,sma i
+w_11754,jmp r_drcirc
+w_11755,lac u_fcplan
+w_11756,add u_prsq
+w_11757,dac w_11761
+w_11760,jda u_fld
+w_11761,0010000
+w_11762,jda u_sqrt
+w_11763,lac u_aexp
+w_11764,cma
+        sub [1]
+w_11765,add u_scale
+w_11766,cma
+        sub [1]
+w_11767,dac u_aexp
+w_11770,jda u_fst
+w_11771,u_dtmp1
+w_11772,jda u_fcp
+w_11773,u_thrs
+w_11774,sma i
+w_11775,jmp r_drcirc
+w_11776,jda u_fng
+w_11777,lac u_dpar
+w_12000,cma
+        sub [1]
+w_12001,add u_scale
+w_12002,cma
+        sub [1]
+w_12003,dac u_dpar
+w_12004,jda u_fad
+w_12005,u_dpar
+w_12006,jda u_sfdv
+w_12007,u_dpar
+w_12010,jda u_fst
+w_12011,u_dtmp2
+w_12012,jda u_sfmp
+w_12013,u_spy
+w_12014,jda u_fst
+w_12015,u_wy
+w_12016,jda u_inscr
+w_12017,jmp r_drcirc
+w_12020,dac u_sety
+w_12021,lac u_inflg
+w_12022,sma
+w_12023,jda u_rotx
+w_12024,jda u_fld
+w_12025,u_dtmp2
+w_12026,jda u_sfmp
+w_12027,u_spx
+w_12030,jda u_fst
+w_12031,u_wx
+w_12032,jda u_inscr
+w_12033,jmp r_drcirc
+w_12034,dac u_setx
+w_12035,jda u_fld
+w_12036,u_spy
+w_12037,jda u_fng
+w_12040,jda u_fad
+w_12041,u_wy
+w_12042,jda u_fst
+w_12043,u_wy
+w_12044,jda u_fld
+w_12045,u_spx
+w_12046,jda u_fng
+w_12047,jda u_fad
+w_12050,u_wx
+w_12051,jda u_fst
+w_12052,u_wx
+w_12053,jda u_fld
+w_12054,u_dtmp1
+w_12055,jda u_sfmp
+w_12056,u_pid10
+w_12057,jda u_fcp
+w_12060,u_f400
+w_12061,sma i
+w_12062,jmp w_12066
+w_12063,lac u_d400
+w_12064,dac u_narcs
+w_12065,jmp w_12075
+w_12066,jda u_fix
+w_12067,add u_dm20
+w_12070,sma i
+w_12071,cla
+w_12072,add u_d20
+w_12073,dac u_narcs
+w_12074,jda u_flt
+w_12075,jda u_fst
+w_12076,u_dtmp1
+w_12077,law i 01
+w_12100,add u_narcs
+w_12101,cma
+        sub [1]
+w_12102,dac u_narcs
+w_12103,jda u_fld
+w_12104,u_f2pi
+w_12105,jda u_sfdv
+w_12106,u_dtmp1
+w_12107,jda u_fst
+w_12110,u_v
+w_12111,jda u_sfmp
+w_12112,u_v
+w_12113,law i 01
+w_12114,add u_aexp
+w_12115,dac u_aexp
+w_12116,jda u_fng
+w_12117,jda u_fad
+w_12120,u_fpone
+w_12121,jda u_fst
+w_12122,u_vv
+// by hand: st4.s:248-249's intensity word is gone; each arc's start has its own (surf).
+w_12125,jda u_surf
+w_12126,jmp r_drcirc
+w_12127,jda u_surf
+w_12130,jmp r_drcirc
+w_12131,jmp r_drcirc
+// by hand: fop.s, the floating point package, rewritten for the PDP-1 in fop.ac.
+// Its routines keep the names the translation calls.
+// Space Travel calls neither sfad nor sin, which are left out for the display list's room.
+#define FOP_NOSFAD
+#define FOP_NOSIN
+#define FOP_NOFNO
+#include "fop.ac"
+u_buf,  0000000
+        dap r_buf
+        lac u_buf
+w_13537,add u_points
+w_13540,dac w_15443+03
+// by hand: the planet's center for the 340 (st5.s:7-14).
+// Its brightness is 040004 to 040007 for 1970's intensity 0 to 3, as the 340's 4 to 7;
+// its row and column, h_y and h_x, kept by displa or the speed's mark, the beam put one
+// below; then four increments light the four points round the center, a diamond, where
+// 1970 drew a square of eight.
+// That is four words, not five, so that all 32 planets fit in a list.
+// They are written when they fit.
+        law 4
+        jda h_room
+        jmp r_buf
+w_13541,lac i w_15443+03
+        and u_o7
+        ior h_ppt
+        jda h_put
+        lac h_y
+        add u_dm1
+        ior h_ybit
+        jda h_put
+        lac h_x
+        ior h_nxinc
+        jda h_put
+        lac h_inc1
+        jda h_put
+w_13551,jmp r_buf
+u_dispname,0000000
+        dap r_dispname
+        lac u_dispname
+w_13553,add u_names
+w_13554,dac w_15443+03
+w_13555,lac i w_15443+03
+w_13556,add u_dm1
+w_13557,dac 010
+w_13560,law w_15637
+w_13561,dac 011
+w_13562,law i 012
+w_13563,dac w_15443+03
+w_13564,idx 010
+        lac i 010
+w_13565,sza i
+w_13566,jmp w_13605
+w_13567,dac w_15443+04
+w_13570,dac x_lnk
+        scr 9s
+w_13571,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_13572,idx w_15443+03
+        sza
+w_13573,sma spa
+w_13574,jmp r_dispname
+w_13575,lac w_15443+04
+w_13576,and u_o177
+w_13577,sza i
+w_13600,jmp w_13605
+w_13601,dac x_ac
+        idx 011
+        lac x_ac
+        dac i 011
+w_13602,idx w_15443+03
+        sza
+w_13603,jmp w_13564
+w_13604,jmp r_dispname
+w_13605,idx 011
+        dzm i 011
+w_13606,idx w_15443+03
+        sza
+w_13607,jmp w_13605
+w_13610,jmp r_dispname
+u_dspsca,0000000
+        dap r_dspsca
+        lac u_dspsca
+w_13612,lac u_scale
+w_13613,sma
+w_13614,jmp w_13623
+w_13615,lac u_o55
+w_13616,dac u_dssca
+w_13617,law i 01
+w_13620,add u_scale
+w_13621,cma
+        sub [1]
+w_13622,jmp w_13626
+w_13623,lac u_o53
+w_13624,dac u_dssca
+w_13625,lac u_scale
+w_13626,dzm x_lnk
+w_13627,lia
+        cla
+        scl 1s
+        div w_13630
+        jmp .+2
+        swp
+        jmp w_13631
+w_13630,0000012
+w_13631,add u_o60
+w_13632,dac u_dssca+02
+w_13633,lai
+w_13634,add u_o60
+w_13635,dac u_dssca+01
+w_13636,jmp r_dspsca
+u_names,w_13640
+w_13640,u_sun
+w_13641,u_earth
+w_13642,u_ariel
+w_13643,u_callisto
+w_13644,u_moon
+w_13645,u_deimos
+w_13646,u_dione
+w_13647,u_enceladu
+w_13650,u_europa
+w_13651,u_ganymede
+w_13652,u_hyperion
+w_13653,u_iapetus
+w_13654,u_io
+w_13655,u_jupiter
+w_13656,u_mars
+w_13657,u_mercury
+w_13660,u_mimas
+w_13661,u_miranda
+w_13662,u_neptune
+w_13663,u_nereid
+w_13664,u_oberon
+w_13665,u_phobos
+w_13666,u_phoebe
+w_13667,u_pluto
+w_13670,u_rhea
+w_13671,u_saturn
+w_13672,u_tethys
+w_13673,u_titan
+w_13674,u_triton
+w_13675,u_umbriel
+w_13676,u_uranus
+w_13677,u_venus
+u_sun,  0163165
+w_13701,0156000
+u_earth,0145141
+w_13703,0162164
+w_13704,0150000
+u_ariel,0141162
+w_13706,0151145
+w_13707,0154000
+u_callisto,0143141
+w_13711,0154154
+w_13712,0151163
+w_13713,0164157
+w_13714,0000000
+u_moon, 0155157
+w_13716,0157156
+w_13717,0000000
+u_deimos,0144145
+w_13721,0151155
+w_13722,0157163
+w_13723,0000000
+u_dione,0144151
+w_13725,0157156
+w_13726,0145000
+u_enceladu,0145156
+w_13730,0143145
+w_13731,0154141
+w_13732,0144165
+w_13733,0163000
+u_europa,0145165
+w_13735,0162157
+w_13736,0160141
+w_13737,0000000
+u_ganymede,0147141
+w_13741,0156171
+w_13742,0155145
+w_13743,0144145
+w_13744,0000000
+u_hyperion,0150171
+w_13746,0160145
+w_13747,0162151
+w_13750,0157156
+w_13751,0000000
+u_iapetus,0151141
+w_13753,0160145
+w_13754,0164165
+w_13755,0163000
+u_io,   0151157
+w_13757,0000000
+u_jupiter,0152165
+w_13761,0160151
+w_13762,0164145
+w_13763,0162000
+u_mars, 0155141
+w_13765,0162163
+w_13766,0000000
+u_mercury,0155145
+w_13770,0143165
+w_13771,0162171
+w_13772,0000000
+u_mimas,0155151
+w_13774,0155141
+w_13775,0163000
+u_miranda,0155151
+w_13777,0162141
+w_14000,0156144
+w_14001,0141000
+u_neptune,0156145
+w_14003,0160164
+w_14004,0165156
+w_14005,0145000
+u_nereid,0156145
+w_14007,0162145
+w_14010,0151144
+w_14011,0000000
+u_oberon,0157142
+w_14013,0145162
+w_14014,0157156
+w_14015,0000000
+u_phobos,0160150
+w_14017,0157142
+w_14020,0157163
+w_14021,0000000
+u_phoebe,0160150
+w_14023,0157145
+w_14024,0142145
+w_14025,0000000
+u_pluto,0160154
+w_14027,0165164
+w_14030,0157000
+u_rhea, 0162150
+w_14032,0145141
+w_14033,0000000
+u_saturn,0163141
+w_14035,0164165
+w_14036,0162156
+w_14037,0000000
+u_tethys,0164145
+w_14041,0164150
+w_14042,0171163
+w_14043,0000000
+u_titan,0164151
+w_14045,0164141
+w_14046,0156000
+u_triton,0164162
+w_14050,0151164
+w_14051,0157156
+w_14052,0000000
+u_umbriel,0165155
+w_14054,0142162
+w_14055,0151145
+w_14056,0154000
+u_uranus,0165162
+w_14060,0141156
+w_14061,0165163
+w_14062,0000000
+u_venus,0166145
+w_14064,0156165
+w_14065,0163000
+u_points,w_14067
+w_14067,0040007
+w_14070,0040006
+w_14071,0040004
+w_14072,0040006
+w_14073,0040005
+w_14074,0040004
+w_14075,0040005
+w_14076,0040004
+w_14077,0040005
+w_14100,0040006
+w_14101,0040004
+w_14102,0040005
+w_14103,0040005
+w_14104,0040007
+w_14105,0040006
+w_14106,0040005
+w_14107,0040004
+w_14110,0040004
+w_14111,0040007
+w_14112,0040004
+w_14113,0040005
+w_14114,0040004
+w_14115,0040004
+w_14116,0040005
+w_14117,0040005
+w_14120,0040007
+w_14121,0040005
+w_14122,0040006
+w_14123,0040005
+w_14124,0040004
+w_14125,0040007
+w_14126,0040006
+u_fppar,w_14130
+w_14130,0000000
+w_14131,0000003
+w_14132,0000006
+w_14133,0000011
+w_14134,0000014
+w_14135,0000017
+w_14136,0000022
+w_14137,0000025
+w_14140,0000030
+w_14141,0000033
+w_14142,0000036
+w_14143,0000041
+w_14144,0000044
+w_14145,0000047
+w_14146,0000052
+w_14147,0000055
+w_14150,0000060
+w_14151,0000063
+w_14152,0000066
+w_14153,0000071
+w_14154,0000074
+w_14155,0000077
+w_14156,0000102
+w_14157,0000105
+w_14160,0000110
+w_14161,0000113
+w_14162,0000116
+w_14163,0000121
+w_14164,0000124
+w_14165,0000127
+w_14166,0000132
+w_14167,0000135
+u_ppar, w_14171
+w_14171,0000000
+w_14172,0000000
+w_14173,0000036
+w_14174,0000015
+w_14175,0000001
+w_14176,0000016
+w_14177,0000031
+w_14200,0000031
+w_14201,0000015
+w_14202,0000015
+w_14203,0000031
+w_14204,0000031
+w_14205,0000015
+w_14206,0000000
+w_14207,0000000
+w_14210,0000000
+w_14211,0000031
+w_14212,0000036
+w_14213,0000000
+w_14214,0000022
+w_14215,0000036
+w_14216,0000016
+w_14217,0000031
+w_14220,0000000
+w_14221,0000031
+w_14222,0000000
+w_14223,0000031
+w_14224,0000031
+w_14225,0000022
+w_14226,0000036
+w_14227,0000000
+w_14230,0000000
+u_prsq, w_14232
+w_14232,0000016
+w_14233,0272245
+w_14234,0075341
+w_14235,0000001
+w_14236,0200000
+w_14237,0000000
+w_14240,0777770
+w_14241,0244122
+w_14242,0506362
+w_14243,0777775
+w_14244,0251477
+w_14245,0620663
+w_14246,0777774
+w_14247,0230761
+w_14250,0127762
+w_14251,0777752
+w_14252,0320300
+w_14253,0054474
+w_14254,0777771
+w_14255,0324134
+w_14256,0124211
+w_14257,0777767
+w_14260,0335416
+w_14261,0541570
+w_14262,0777773
+w_14263,0371372
+w_14264,0000000
+w_14265,0777771
+w_14266,0247430
+w_14267,0000000
+w_14270,0777766
+w_14271,0311150
+w_14272,0000000
+w_14273,0777772
+w_14274,0302622
+w_14275,0000000
+w_14276,0777775
+w_14277,0256475
+w_14300,0000000
+w_14301,0000007
+w_14302,0376733
+w_14303,0000000
+w_14304,0777776
+w_14305,0221530
+w_14306,0000000
+w_14307,0777775
+w_14310,0235142
+w_14311,0000000
+w_14312,0777767
+w_14313,0217266
+w_14314,0000000
+w_14315,0777766
+w_14316,0274361
+w_14317,0000000
+w_14320,0000004
+w_14321,0365471
+w_14322,0000000
+w_14323,0777765
+w_14324,0227176
+w_14325,0000000
+w_14326,0777771
+w_14327,0342454
+w_14330,0000000
+w_14331,0777754
+w_14332,0326340
+w_14333,0000000
+w_14334,0777764
+w_14335,0326265
+w_14336,0000000
+w_14337,0777775
+w_14340,0323774
+w_14341,0000000
+w_14342,0777772
+w_14343,0255140
+w_14344,0000000
+w_14345,0000007
+w_14346,0263573
+w_14347,0000000
+w_14350,0777771
+w_14351,0223174
+w_14352,0000000
+w_14353,0777775
+w_14354,0251477
+w_14355,0000000
+w_14356,0777775
+w_14357,0235142
+w_14360,0000000
+w_14361,0777772
+w_14362,0223060
+w_14363,0000000
+w_14364,0000005
+w_14365,0206115
+w_14366,0000000
+w_14367,0000000
+w_14370,0362406
+w_14371,0000000
+u_accl, w_14373
+#if ST_K == 1
+w_14373,0000000
+w_14374,0204365
+w_14375,0000000
+w_14376,0777754
+w_14377,0320324
+w_14400,0000000
+w_14401,0777741
+w_14402,0227207
+w_14403,0000000
+w_14404,0777760
+w_14405,0340500
+w_14406,0000000
+w_14407,0777747
+w_14410,0210041
+w_14411,0000000
+w_14412,0777714
+w_14413,0341666
+w_14414,0000000
+w_14415,0777743
+w_14416,0235122
+w_14417,0000000
+w_14420,0777740
+w_14421,0247531
+w_14422,0000000
+w_14423,0777746
+w_14424,0310316
+w_14425,0000000
+w_14426,0777750
+w_14427,0334427
+w_14430,0000000
+w_14431,0777736
+w_14432,0315203
+w_14433,0000000
+w_14434,0777744
+w_14435,0303403
+w_14436,0000000
+w_14437,0777747
+w_14440,0245752
+w_14441,0000000
+w_14442,0777760
+w_14443,0201414
+w_14444,0000000
+w_14445,0777751
+w_14446,0263753
+w_14447,0000000
+w_14450,0777751
+w_14451,0205241
+w_14452,0000000
+w_14453,0777737
+w_14454,0256464
+w_14455,0000000
+w_14456,0777736
+w_14457,0272051
+w_14460,0000000
+w_14461,0777760
+w_14462,0340566
+w_14463,0000000
+w_14464,0777734
+w_14465,0275073
+w_14466,0000000
+w_14467,0777743
+w_14470,0255345
+w_14471,0000000
+w_14472,0777717
+w_14473,0341650
+w_14474,0000000
+w_14475,0777733
+w_14476,0341552
+w_14477,0000000
+w_14500,0777757
+w_14501,0307762
+w_14502,0000000
+w_14503,0777744
+w_14504,0243712
+w_14505,0000000
+w_14506,0777763
+w_14507,0233053
+w_14510,0000000
+w_14511,0777742
+w_14512,0265543
+w_14513,0000000
+w_14514,0777750
+w_14515,0340500
+w_14516,0000000
+w_14517,0777750
+w_14520,0210344
+w_14521,0000000
+w_14522,0777740
+w_14523,0210777
+w_14524,0000000
+w_14525,0777760
+w_14526,0275653
+w_14527,0000000
+w_14530,0777754
+w_14531,0252667
+w_14532,0000000
+#else
+w_14373,0000003                         // by hand: accl times k^2, 9
+w_14374,0225023
+w_14375,0500000
+w_14376,0777757
+w_14377,0352356
+w_14400,0400000
+w_14401,0777744
+w_14402,0252127
+w_14403,0700000
+w_14404,0777763
+w_14405,0374550
+w_14406,0000000
+w_14407,0777752
+w_14410,0231045
+w_14411,0100000
+w_14412,0777717
+w_14413,0376054
+w_14414,0600000
+w_14415,0777746
+w_14416,0260634
+w_14417,0200000
+w_14420,0777743
+w_14421,0274504
+w_14422,0100000
+w_14423,0777751
+w_14424,0341347
+w_14425,0600000
+w_14426,0777753
+w_14427,0370071
+w_14430,0700000
+w_14431,0777741
+w_14432,0346723
+w_14433,0300000
+w_14434,0777747
+w_14435,0333743
+w_14436,0300000
+w_14437,0777752
+w_14440,0272547
+w_14441,0200000
+w_14442,0777763
+w_14443,0221555
+w_14444,0400000
+w_14445,0777754
+w_14446,0312350
+w_14447,0300000
+w_14450,0777754
+w_14451,0225765
+w_14452,0100000
+w_14453,0777742
+w_14454,0304332
+w_14455,0400000
+w_14456,0777741
+w_14457,0321256
+w_14460,0100000
+w_14461,0777763
+w_14462,0374644
+w_14463,0600000
+w_14464,0777737
+w_14465,0324602
+w_14466,0300000
+w_14467,0777746
+w_14470,0303101
+w_14471,0500000
+w_14472,0777722
+w_14473,0376035
+w_14474,0000000
+w_14475,0777736
+w_14476,0375727
+w_14477,0200000
+w_14500,0777762
+w_14501,0340760
+w_14502,0200000
+w_14503,0777747
+w_14504,0270303
+w_14505,0200000
+w_14506,0777766
+w_14507,0256360
+w_14510,0300000
+w_14511,0777745
+w_14512,0314317
+w_14513,0300000
+w_14514,0777753
+w_14515,0374550
+w_14516,0000000
+w_14517,0777753
+w_14520,0231400
+w_14521,0400000
+w_14522,0777743
+w_14523,0232076
+w_14524,0700000
+w_14525,0777763
+w_14526,0325440
+w_14527,0300000
+w_14530,0777757
+w_14531,0300155
+w_14532,0700000
+#endif
+u_px,   w_14534
+w_14534,0000000
+w_14535,0000000
+w_14536,0000000
+w_14537,0000015
+w_14540,0620356
+w_14541,0000000
+w_14542,0000005
+w_14543,0360005
+w_14544,0000000
+w_14545,0000010
+w_14546,0666214
+w_14547,0000000
+w_14550,0000005
+w_14551,0704053
+w_14552,0000000
+w_14553,0000002
+w_14554,0347600
+w_14555,0000000
+w_14556,0000005
+w_14557,0310506
+w_14560,0000000
+w_14561,0000006
+w_14562,0220622
+w_14563,0000000
+w_14564,0000007
+w_14565,0310473
+w_14566,0000000
+w_14567,0000004
+w_14570,0370065
+w_14571,0000000
+w_14572,0000006
+w_14573,0304101
+w_14574,0000000
+w_14575,0000011
+w_14576,0676631
+w_14577,0000000
+w_14600,0000006
+w_14601,0653020
+w_14602,0000000
+w_14603,0000020
+w_14604,0317202
+w_14605,0000000
+w_14606,0000017
+w_14607,0644356
+w_14610,0000000
+w_14611,0000013
+w_14612,0206414
+w_14613,0000000
+w_14614,0000005
+w_14615,0245346
+w_14616,0000000
+w_14617,0000004
+w_14620,0222264
+w_14621,0000000
+w_14622,0000023
+w_14623,0261234
+w_14624,0000000
+w_14625,0000001
+w_14626,0372225
+w_14627,0000000
+w_14630,0000007
+w_14631,0646102
+w_14632,0000000
+w_14633,0000001
+w_14634,0212446
+w_14635,0000000
+w_14636,0000013
+w_14637,0773152
+w_14640,0000000
+w_14641,0000024
+w_14642,0274557
+w_14643,0000000
+w_14644,0000004
+w_14645,0227474
+w_14646,0000000
+w_14647,0000020
+w_14650,0263122
+w_14651,0000000
+w_14652,0000004
+w_14653,0333254
+w_14654,0000000
+w_14655,0000010
+w_14656,0216672
+w_14657,0000000
+w_14660,0000006
+w_14661,0231142
+w_14662,0000000
+w_14663,0000006
+w_14664,0212701
+w_14665,0000000
+w_14666,0000023
+w_14667,0650051
+w_14670,0000000
+w_14671,0000016
+w_14672,0233751
+w_14673,0000000
+u_py,   w_14675
+w_14675,0000000
+w_14676,0000000
+w_14677,0000000
+w_14700,0000017
+w_14701,0664054
+w_14702,0000000
+w_14703,0000002
+w_14704,0662035
+w_14705,0000000
+w_14706,0000010
+w_14707,0350757
+w_14710,0000000
+w_14711,0000006
+w_14712,0334771
+w_14713,0000000
+w_14714,0000000
+w_14715,0267000
+w_14716,0000000
+w_14717,0000006
+w_14720,0726770
+w_14721,0000000
+w_14722,0000004
+w_14723,0225752
+w_14724,0000000
+w_14725,0000006
+w_14726,0201346
+w_14727,0000000
+w_14730,0000010
+w_14731,0247536
+w_14732,0000000
+w_14733,0000010
+w_14734,0343277
+w_14735,0000000
+w_14736,0000011
+w_14737,0314411
+w_14740,0000000
+w_14741,0000006
+w_14742,0712237
+w_14743,0000000
+w_14744,0000021
+w_14745,0334656
+w_14746,0000000
+w_14747,0000017
+w_14750,0342324
+w_14751,0000000
+w_14752,0000016
+w_14753,0615151
+w_14754,0000000
+w_14755,0000005
+w_14756,0644257
+w_14757,0000000
+w_14760,0000005
+w_14761,0622456
+w_14762,0000000
+w_14763,0000024
+w_14764,0224063
+w_14765,0000000
+w_14766,0000012
+w_14767,0331314
+w_14770,0000000
+w_14771,0000006
+w_14772,0640034
+w_14773,0000000
+w_14774,0000001
+w_14775,0200024
+w_14776,0000000
+w_14777,0000011
+w_15000,0243161
+w_15001,0000000
+w_15002,0000023
+w_15003,0772355
+w_15004,0000000
+w_15005,0000007
+w_15006,0644432
+w_15007,0000000
+w_15010,0000022
+w_15011,0726324
+w_15012,0000000
+w_15013,0000006
+w_15014,0260740
+w_15015,0000000
+w_15016,0000010
+w_15017,0600213
+w_15020,0000000
+w_15021,0000006
+w_15022,0237476
+w_15023,0000000
+w_15024,0000005
+w_15025,0674734
+w_15026,0000000
+w_15027,0000023
+w_15030,0616334
+w_15031,0000000
+w_15032,0000016
+w_15033,0327155
+w_15034,0000000
+u_pw,   w_15036
+w_15036,
+        table 0140, 0
+u_pww,  w_15177
+#if ST_K == 1
+w_15177,0000000
+w_15200,0000000
+w_15201,0000000
+w_15202,0777723
+w_15203,0663265
+w_15204,0376074
+w_15205,0777741
+w_15206,0743326
+w_15207,0460356
+w_15210,0777734
+w_15211,0647730
+w_15212,0444215
+w_15213,0777732
+w_15214,0767246
+w_15215,0341205
+w_15216,0777743
+w_15217,0745027
+w_15220,0221674
+w_15221,0777741
+w_15222,0702670
+w_15223,0530661
+w_15224,0777743
+w_15225,0702340
+w_15226,0273047
+w_15227,0777740
+w_15230,0747771
+w_15231,0100452
+w_15232,0777736
+w_15233,0743411
+w_15234,0732756
+w_15235,0777733
+w_15236,0716603
+w_15237,0200021
+w_15240,0777727
+w_15241,0755641
+w_15242,0517072
+w_15243,0777742
+w_15244,0751602
+w_15245,0332677
+w_15246,0777705
+w_15247,0631066
+w_15250,0300145
+w_15251,0777721
+w_15252,0712656
+w_15253,0015171
+w_15254,0777727
+w_15255,0701167
+w_15256,0507203
+w_15257,0777744
+w_15260,0715124
+w_15261,0202507
+w_15262,0777743
+w_15263,0665024
+w_15264,0365605
+w_15265,0777704
+w_15266,0730064
+w_15267,0776551
+w_15270,0777723
+w_15271,0667362
+w_15272,0431776
+w_15273,0777734
+w_15274,0775760
+w_15275,0312631
+w_15276,0777747
+w_15277,0740613
+w_15300,0034530
+w_15301,0777722
+w_15302,0635657
+w_15303,0370276
+w_15304,0777703
+w_15305,0677234
+w_15306,0315321
+w_15307,0777740
+w_15310,0617102
+w_15311,0655555
+w_15312,0777711
+w_15313,0723370
+w_15314,0773672
+w_15315,0777742
+w_15316,0714526
+w_15317,0724272
+w_15320,0777734
+w_15321,0667633
+w_15322,0402706
+w_15323,0777737
+w_15324,0636053
+w_15325,0440472
+w_15326,0777740
+w_15327,0650025
+w_15330,0224325
+w_15331,0777706
+w_15332,0717663
+w_15333,0701773
+w_15334,0777725
+w_15335,0754612
+w_15336,0304722
+#else
+w_15177,0000000                         // by hand: pww times k, 3
+w_15200,0000000
+w_15201,0000000
+w_15202,0777725
+w_15203,0606410
+w_15204,0076455
+w_15205,0777743
+w_15206,0652440
+w_15207,0744262
+w_15210,0777735
+w_15211,0773704
+w_15212,0666323
+w_15213,0777734
+w_15214,0671374
+w_15215,0650743
+w_15216,0777745
+w_15217,0653621
+w_15220,0355315
+w_15221,0777743
+w_15222,0622112
+w_15223,0402504
+w_15224,0777745
+w_15225,0621650
+w_15226,0214235
+w_15227,0777742
+w_15230,0655772
+w_15231,0660337
+w_15232,0777740
+w_15233,0652507
+w_15234,0344162
+w_15235,0777735
+w_15236,0633042
+w_15237,0340014
+w_15240,0777731
+w_15241,0662271
+w_15242,0173253
+w_15243,0777744
+w_15244,0657241
+w_15245,0644117
+w_15246,0777706
+w_15247,0745521
+w_15250,0440227
+w_15251,0777723
+w_15252,0630102
+w_15253,0411732
+w_15254,0777731
+w_15255,0620731
+w_15256,0565342
+w_15257,0777746
+w_15260,0631677
+w_15261,0141765
+w_15262,0777745
+w_15263,0607617
+w_15264,0270243
+w_15265,0777706
+w_15266,0642047
+w_15267,0577016
+w_15270,0777725
+w_15271,0611465
+w_15272,0723376
+w_15273,0777736
+w_15274,0676364
+w_15275,0230062
+w_15276,0777751
+w_15277,0650450
+w_15300,0225402
+w_15301,0777723
+w_15302,0754607
+w_15303,0164435
+w_15304,0777705
+w_15305,0617365
+w_15306,0232034
+w_15307,0777741
+w_15310,0726544
+w_15311,0204443
+w_15312,0777713
+w_15313,0636472
+w_15314,0574713
+w_15315,0777744
+w_15316,0631401
+w_15317,0137213
+w_15320,0777736
+w_15321,0611664
+w_15322,0502124
+w_15323,0777740
+w_15324,0755101
+w_15325,0260727
+w_15326,0777741
+w_15327,0774037
+w_15330,0736477
+w_15331,0777710
+w_15332,0633706
+w_15333,0721374
+w_15334,0777727
+w_15335,0661447
+w_15336,0623535
+#endif
+u_d10,  0000012
+u_d3,   0000003
+u_o246256,0246256
+u_o253052,0253052
+u_o246036,0246036
+u_o177, 0000177
+u_nplan,0000040
+u_d1,   0000001
+u_d20,  0000024
+u_dm1,  0777776
+u_o141577,0141577
+u_o161577,0161577
+u_o164372,0164372
+u_o114, 0000114
+u_o20714,0020714
+u_d383, 0000577
+u_dm768,0776377
+u_o145777,0145777
+u_o165777,0165777
+u_o7,   0000007
+u_o60,  0000060
+u_o55,  0000055
+u_o53,  0000053
+u_o41,  0000041
+u_o220000,0220000
+u_d400, 0000620
+u_dm20, 0777753
+u_o40004,0040004
+u_fardst,0000020
+w_15374,0200000
+w_15375,0000000
+u_f2pi, 0000003
+w_15377,0311037
+w_15400,0066745
+u_pid10,0777775
+w_15402,0240662
+w_15403,0705647
+u_thrs, 0000002
+w_15405,0200000
+w_15406,0000000
+u_f400, 0000011
+w_15410,0310000
+w_15411,0000000
+#if ST_K == 1
+u_crash,0777747
+w_15413,0200000
+w_15414,0000000
+#else
+u_crash,0777752                         // by hand: crash times k^2, 9
+w_15413,0220000
+w_15414,0000000
+#endif
+u_stheta,0000001
+w_15416,0200000
+w_15417,0000000
+u_ctheta,0000000
+w_15421,0000000
+w_15422,0000000
+u_fpzero,0000000
+w_15424,0000000
+w_15425,0000000
+u_scale,0000000
+u_vscale,0000006
+u_ascale,0777776
+#if ST_K == 1
+u_sdphi,0777772
+w_15432,0253436
+w_15433,0700177
+u_cdphi,0000000
+w_15435,0377743
+w_15436,0201725
+#else
+u_sdphi,0777774                         // by hand: 1970's turn taken k times, 3.6 degrees
+w_15432,0200460
+w_15433,0503367
+u_cdphi,0000000
+w_15435,0377375
+w_15436,0267767
+#endif
+u_dhalt,0400000
+u_fpone,0000001
+w_15441,0200000
+w_15442,0000000
+w_15443,
+        table 05, 0
+u_horizv,
+        table 03, 0
+u__pbson,
+        table 01, 0
+u__pbsint,
+        table 01, 0
+u_dspflg,
+        table 01, 0
+u_par,
+        table 01, 0
+u_absi,
+        table 01, 0
+u_absx,
+        table 03, 0
+u_absy,
+        table 03, 0
+u_v,
+        table 03, 0
+u_vv,
+        table 03, 0
+u_spx,
+        table 03, 0
+u_spy,
+        table 03, 0
+u_wx,
+        table 03, 0
+u_wy,
+        table 03, 0
+u_twx,
+        table 03, 0
+u_twy,
+        table 03, 0
+u_setx,
+        table 01, 0
+u_sety,
+        table 01, 0
+u_narcs,
+        table 01, 0
+u_nt,
+        table 01, 0
+u_inflg,
+        table 01, 0
+u_grvflg,
+        table 01, 0
+u_dtmp1,
+        table 03, 0
+u_dtmp2,
+        table 03, 0
+u_delx,
+        table 01, 0
+u_dely,
+        table 01, 0
+u_tsetx,
+        table 01, 0
+u_tsety,
+        table 01, 0
+u_accflg,
+        table 01, 0
+u_locpar,
+        table 01, 0
+u_crflg,
+        table 01, 0
+u_rpar,
+        table 03, 0
+u_dpar,
+        table 03, 0
+u_ax,
+        table 03, 0
+u_ay,
+        table 03, 0
+u_maxa,
+        table 03, 0
+u_maxj,
+        table 01, 0
+u_dcplan,
+        table 01, 0
+u_fcplan,
+        table 01, 0
+u_cplan,
+        table 01, 0
+u_shipx,
+        table 03, 0
+u_shipy,
+        table 03, 0
+u_x,
+        table 03, 0
+u_y,
+        table 03, 0
+u_ox,
+        table 03, 0
+u_oy,
+        table 03, 0
+u_lanflg,
+        table 01, 0
+u_goflg,
+        table 01, 0
+u_forflg,
+        table 01, 0
+u_bacflg,
+        table 01, 0
+u_sphi,
+        table 03, 0
+u_cphi,
+        table 03, 0
+u_ftmp1,
+        table 03, 0
+u_ftmp2,
+        table 03, 0
+u_locflg,
+        table 03, 0
+// by hand: the display for the 340 in place of the GRAPHIC-2's list (st7.s:120-158).
+//
+// 1970 built the list in place while the display ran it.
+// On the 340 a refresh that reads past the writer runs old words in the wrong mode, and an
+// old word taken for a subroutine deposit would write into the kernel's banks, so each
+// frame is built in a list the 340 is not running, and then given to capt.
+// The parts, in memory order, are these.
+//   List A, h_la, built here, filled with no-op words up to the static part, which it
+//     runs into, and stopped by the gate, a halt.
+//   The static part, h_stat, the frame of the view and the eight pen buttons.
+//   The gate, h_gate, a no-op word while list B is shown, a halt while A is.
+//   List B, from the word after the gate to the bank's top, shown from h_stat.
+// Each element is written only when all its words fit (h_room), so a full list ends with
+// whole elements; it ends with a halt (B) or runs into the static part (A).
+//
+// The texts, as 1970 kept them, one ASCII character a word, for h_text to copy into
+// each frame's list in the 340's characters.
+u_dispcl,0000000
+w_15637,0000000                         // the word before namedsp, dispname's pointer's start
+u_namedsp,
+        table 012, 0
+u_dssca,
+        table 03, 0
+
+// The list's words that the program builds from.
+h_ppt,  parameter scale(0) lpoff next(point) 010        // a planet; its intensity ORed in
+h_pcir, parameter scale(0) intensity(4) lpoff next(point)       // an arc of a circle
+h_ybit, y(0) next(point)
+h_nxinc, next(increment)
+h_nxvec, next(vector)
+h_inc1, end visible set1(incup|incright) set2(incup|incleft) set3(incdown|incleft) set4(incdown|incright)
+h_hlt,  parameter halt
+h_tp1,  parameter scale(1) intensity(7) lpoff next(point)       // "CL" or "L"
+h_ty,   y(0d20) next(point)
+h_tx1,  x(0d800) next(character)
+h_tp2,  parameter intensity(4) next(point)                      // the planet's name
+h_tx2,  x(0) next(character)
+h_tp3,  parameter next(point)                                   // the scale
+h_tx3,  x(0d400) next(character)
+h_btna, h_bt0           // the first button's first word
+h_pbta, h_pbt
+h_pbt,  0400000         // the buttons' bits, 0 to 7
+        0200000
+        0100000
+        040000
+        020000
+        010000
+        04000
+        02000
+h_sm1,  h_stat-1        // list A's last word
+
+// Store AC in the list's next word, at 017 + 1, as 1970's store through clistp did.
+// Entry: AC = the word.
+// AC and IO are preserved.
+// Called via jda.
+h_put,  0
+        dap h_ptx
+        idx 017
+        lac h_put
+        dac i 017
+h_ptx,  jmp .
+
+// Skip when AC words fit in the room left in the list being built.
+// Entry: AC = the number of words.
+// AC is clobbered, IO is preserved.
+// Called via jda; skips when they fit.
+h_room, 0
+        dap h_rmx
+        lac h_room
+        add 017
+        dac h_t
+        lac h_lim1
+        sub h_t                 // +0, no room, when the last would be the limit's word
+        sma sza
+        idx h_rmx
+h_rmx,  jmp .
+
+// The segment delx, dely as a visible 340 vector word, into the list.
+// Entry: delx and dely.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+h_vw,   0
+        dap h_vwx
+        lac u_dely
+        spa
+        cma                     // the length
+        and h_m7b
+        ral 8s
+        ior h_vis
+        dac h_t2
+        lac u_dely
+        sma
+        jmp h_vw1
+        lac h_t2
+        ior h_dn
+        dac h_t2
+h_vw1,  lac u_delx
+        spa
+        cma
+        and h_m7b
+        ior h_t2
+        dac h_t2
+        lac u_delx
+        sma
+        jmp h_vw2
+        lac h_t2
+        ior h_lf
+        dac h_t2
+h_vw2,  lac h_t2
+        jda h_put
+h_vwx,  jmp .
+
+// An ASCII character into the list in the 340's first character set (letters of either
+// case as capitals, 040 to 077 as they are), three to a word.
+// Entry: AC = the character, 0 for none.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+h_ch,   0
+        dap h_chx
+        lac h_ch
+        sza i
+        jmp h_chx
+        and h_o100
+        sza i
+        jmp h_ch1
+        lac h_ch
+        and h_o37
+        dac h_ch
+h_ch1,  lac h_cw
+        ral 6s
+        ior h_ch
+        dac h_cw
+        idx h_cn
+        sad u_d3
+        jmp h_ch2
+h_chx,  jmp .
+h_ch2,  lac h_cw
+        jda h_put
+        dzm h_cw
+        dzm h_cn
+        jmp h_chx
+
+// The end character, and the last word of characters into the list.
+// Has no arguments and no return values.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+h_che,  0
+        dap h_cex
+        lac h_o37
+        jda h_ch
+h_ce1,  lac h_cn
+        sza i
+        jmp h_cex
+        lac h_o37               // the end again, filling the word
+        jda h_ch
+        jmp h_ce1
+h_cex,  jmp .
+
+// The texts at the start of the list.
+// They are "CL" or "L" at 800, the planet's name at 0 and the scale at 400, on row 20,
+// where 1970 put them (st7.s:120-133).
+// The 340 has no blink, so "CL" and "L" are steady, at the brightest.
+// At most 14 words, into a list just begun.
+// Entry: dispcl, namedsp and dssca.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+h_text, 0
+        dap h_txx
+        lac h_tp1
+        jda h_put
+        lac h_ty
+        jda h_put
+        lac h_tx1
+        jda h_put
+        lac u_dispcl
+        sar 9s
+        jda h_ch
+        lac u_dispcl
+        and h_o777
+        jda h_ch
+        jda h_che
+        lac h_tp2
+        jda h_put
+        lac h_tx2
+        jda h_put
+        law u_namedsp
+        dac h_tpt
+        law i 012
+        dac h_tcn
+h_tx4,  lac i h_tpt
+        jda h_ch
+        idx h_tpt
+        isp h_tcn
+        jmp h_tx4
+        jda h_che
+        lac h_tp3
+        jda h_put
+        lac h_tx3
+        jda h_put
+        law u_dssca
+        dac h_tpt
+        law i 03
+        dac h_tcn
+h_tx5,  lac i h_tpt
+        jda h_ch
+        idx h_tpt
+        isp h_tcn
+        jmp h_tx5
+        jda h_che
+h_txx,  jmp .
+
+// Begin the list not shown (st1.s:69-70, where 1970 set clistp to the word before dspl).
+// 017 is set to the word before it and h_lim1 past its room.
+// Has no arguments and no return values.
+// AC is clobbered, IO is preserved.
+// Called via jda.
+h_lst,  0
+        dap h_lsx
+        lac h_cur
+        sza
+        jmp h_ls1
+        law h_gate              // list B, from the word after the gate
+        dac 017
+        lac h_top               // to the bank's top, its halt the last word
+        dac h_lim1
+        jmp h_lsx
+h_ls1,  law h_la-1              // list A, up to the static part
+        dac 017
+        law h_stat
+        dac h_lim1
+h_lsx,  jmp .
+
+// End the list built and show it (st1.s:141-142, 1970's halt).
+// List B gets its halt and the gate is opened, and B is shown from the static part; list
+// A is filled with no-op words up to the static part and the gate is shut, and A is
+// shown.
+// Has no arguments and no return values.
+// AC and IO are clobbered (the capt system call).
+// Called via jda.
+h_lend, 0
+        dap h_lex
+        lac h_cur
+        sza
+        jmp h_le1
+        lac h_hlt
+        jda h_put
+        dzm h_gate
+        law h_stat
+        cal SYSCAPT
+        idx h_cur
+        jmp h_lex
+h_le1,  lac 017
+        sad h_sm1
+        jmp h_le2
+        cla
+        jda h_put
+        jmp h_le1
+h_le2,  lac h_hlt
+        dac h_gate
+        law h_la
+        cal SYSCAPT
+        dzm h_cur
+h_lex,  jmp .
+
+// The push buttons, 1970's pbsflgs, in h_pbs, bit n for button n, from word 4's switches
+// and the pen's hits on the buttons.
+// The switches SS1 to SS4 are forward, back, left and right (buttons 2 to 5), SS5 and SS6
+// the scale (6 and 7), SS5 and SS6 together a reset (1), after which they do nothing until
+// both are off.
+// A pen hit on a button's words is taken, its bit and the time kept, and the button counts
+// as held while the last hit is under 8 sixtieths old; the list is redrawn each 32 ms
+// tick, so a pen held on a button hits it about every two.
+// contrl takes a button's first appearance where 1970 acted once per press.
+// Has no arguments; sets h_pbs, h_sup, h_now, and on a pen hit h_pen and h_tpen.
+// AC and IO are clobbered.
+// Called via jda.
+h_rdpb, 0
+        dap h_rpx
+        lac 4
+        and h_m6
+        dac h_t
+        and u_d3
+        sza
+        jmp h_rp0
+        dzm h_sup
+h_rp0,  sad u_d3
+        jmp h_rp1
+        lac h_sup
+        sza i
+        jmp h_rp2
+        lac h_t
+        and h_m4
+        dac h_t
+h_rp2,  lac h_t
+        ral 9s
+        ral 1s                  // switches 1 to 6 to buttons 2 to 7
+        jmp h_rp3
+h_rp1,  dac h_sup
+        lac h_t
+        and h_m4
+        ral 9s
+        ral 1s
+        ior h_vis               // button 1, the reset
+h_rp3,  dac h_pbs
+        cal SYSTIME
+        dio h_now
+        lac 4
+        sma
+        jmp h_rp5               // no pen hit waiting
+        and h_m17
+        dac 4                   // taken
+        lac 5
+        sub h_btna
+        spa
+        jmp h_rp5               // before the buttons
+        sar 2s
+        dac h_t                 // four words a button
+        sub u_o7                // +0 for the last button, since sub of equals is +0
+        sma sza
+        jmp h_rp5               // after them
+        lac h_t
+        add h_pbta
+        dap h_rp4
+h_rp4,  lac .
+        dac h_pen
+        lac h_now
+        dac h_tpen
+h_rp5,  lac h_tpen
+        cma
+        add h_now               // sixtieths since, +0 when equal
+        spa
+        jmp h_rpx
+        sub u_o7
+        sma sza
+        jmp h_rpx               // 8 sixtieths or more
+        lac h_pbs
+        ior h_pen
+        dac h_pbs
+h_rpx,  jmp .
+
+// For h_far, on to updacc's early return (w_11010) when a number is above fardst (2^15)
+// by at least a unit of its high word.
+// That is an exponent of fardst's, 16, or more, and a magnitude above fardst's high word,
+// 0200000.
+// Then dpar, at least that number, is above fardst by far more than the squares and the
+// sqrt can lose, and fcp finds it so.
+// Else back.
+// Entry: AC = the number's exponent, IO = its high word.
+// AC is clobbered, IO is preserved.
+// Called via jda, which keeps IO (jsp would put the return in AC).
+h_fbg,  0
+        dap h_fbx
+        lac h_fbg
+        sub u_fardst            // fardst's exponent
+        spa
+        jmp h_fbx               // below it
+        lai
+        and h_m17               // the magnitude
+        sub u_fardst+1          // less fardst's high word
+        sma sza
+        jmp w_11010             // above it
+h_fbx,  jmp .
+
+// fld and fst of the operands the hot routines use most (updacc, updpln, absxy, displa),
+// each in one word, a jsp, where fop.ac's take two and about seventeen instructions.
+// Each leaves AC the low word, as fld and fst do.
+// AC is the low word, IO is preserved.
+// Called via jsp.
+h_lax,  dap h_laxx              // fld absx
+        lac u_absx
+        dac u_aexp
+        lac u_absx+1
+        dac u_ams
+        lac u_absx+2
+        dac u_ans
+h_laxx, jmp .
+h_lay,  dap h_layx              // fld absy
+        lac u_absy
+        dac u_aexp
+        lac u_absy+1
+        dac u_ams
+        lac u_absy+2
+        dac u_ans
+h_layx, jmp .
+h_lf1,  dap h_lf1x              // fld ftmp1
+        lac u_ftmp1
+        dac u_aexp
+        lac u_ftmp1+1
+        dac u_ams
+        lac u_ftmp1+2
+        dac u_ans
+h_lf1x, jmp .
+h_sax,  dap h_saxx              // fst absx
+        lac u_aexp
+        dac u_absx
+        lac u_ams
+        dac u_absx+1
+        lac u_ans
+        dac u_absx+2
+h_saxx, jmp .
+h_say,  dap h_sayx              // fst absy
+        lac u_aexp
+        dac u_absy
+        lac u_ams
+        dac u_absy+1
+        lac u_ans
+        dac u_absy+2
+h_sayx, jmp .
+h_sf1,  dap h_sf1x              // fst ftmp1
+        lac u_aexp
+        dac u_ftmp1
+        lac u_ams
+        dac u_ftmp1+1
+        lac u_ans
+        dac u_ftmp1+2
+h_sf1x, jmp .
+h_sf2,  dap h_sf2x              // fst ftmp2
+        lac u_aexp
+        dac u_ftmp2
+        lac u_ams
+        dac u_ftmp2+1
+        lac u_ans
+        dac u_ftmp2+2
+h_sf2x, jmp .
+
+// By hand: k = 3's constants.
+// h_asc, the thrust, is 1970's ascale, which overlaps sdphi (st7.s:50), times k^2, in its
+// own words since sdphi is k = 3's turn; h_thrd is 1/k.
+#if ST_K != 1
+h_asc,  0000003
+        0617774
+        0640400
+h_thrd, 0777776
+        0252525
+        0252525
+#endif
+
+// List A's room is half of what the program leaves, so that B, from h_gate+1 to 07777
+// with its halt, has as much (151 as built, B a word more).
+// Set it again when the program's length changes (Src/cmd/README.md).
+#if ST_K == 1
+#define HLA 0d151
+#else
+#define HLA 0d147
+#endif
+h_la,
+        table HLA, 0
+
+// The static part.
+// The frame of the view, 127 to 895 by 255 to 1023, with its cross at 511 and 639, and
+// the speed's line at 250 below it, as st7.s:134-156 drew them, at scale 1, which draws a
+// dot each 2 units.
+h_stat, parameter scale(1) intensity(4) lpoff next(point)
+        y(0d255) next(point)
+        x(0d127) next(vector)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        visible left deltax(0d96)
+        visible left deltax(0d96)
+        visible left deltax(0d96)
+        visible left deltax(0d96)
+        visible down deltay(0d96)
+        visible down deltay(0d96)
+        visible down deltay(0d96)
+        visible down deltay(0d96)
+        right deltax(0d96)
+        right deltax(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        visible up deltay(0d96)
+        down deltay(0d96) left deltax(0d96)
+        down deltay(0d96) left deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96) end
+        parameter next(point)
+        y(0d250) next(point)
+        x(0d127) next(vector)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96)
+        visible right deltax(0d96) end
+// The eight buttons on row 150, 96 apart from 127, 1970's buttons 0 to 7.
+// Each is four words, a parameter word turning the pen on, the column, and two words of
+// characters, which the pen hits.
+        parameter scale(1) intensity(5) next(point)
+        y(0d150) next(parameter)
+h_bt0,  parameter lpon next(point)
+        x(0d127) next(character)
+        type340 "EXIT "
+        parameter lpon next(point)
+        x(0d223) next(character)
+        type340 "RESET"
+        parameter lpon next(point)
+        x(0d319) next(character)
+        type340 "FWD  "
+        parameter lpon next(point)
+        x(0d415) next(character)
+        type340 "BACK "
+        parameter lpon next(point)
+        x(0d511) next(character)
+        type340 "LEFT "
+        parameter lpon next(point)
+        x(0d607) next(character)
+        type340 "RIGHT"
+        parameter lpon next(point)
+        x(0d703) next(character)
+        type340 "UP   "
+        parameter lpon next(point)
+        x(0d799) next(character)
+        type340 "DOWN "
+h_gate, parameter halt          // shut, list A shown
+// List B, from here to the bank's top.
+x_end,
+0110/
+r_contrl,jmp 0
+r_shipxy,jmp 0
+r_absv, jmp 0
+r_invert,jmp 0
+r_updpln,jmp 0
+r_updacc,jmp 0
+r_updshp,jmp 0
+r_inscr,jmp 0
+r_absxy,jmp 0
+r_displa,jmp 0
+r_rotx, jmp 0
+r_surf, jmp 0
+r_drcirc,jmp 0
+r_buf,  jmp 0
+r_dispname,jmp 0
+r_dspsca,jmp 0
+        constants
+start 020000

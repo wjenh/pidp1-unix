@@ -1,0 +1,1041 @@
+// as1c.ac is the part of as1 that stays in core while its overlays take
+// turns at OV.
+// Each overlay's source includes this file first, so these words are the
+// same in every one.
+// It holds the start, the files, the block cache, the flags, the reports,
+// the stream writer and the overlay loader.
+// The overlays, in their order, are as1.am1, in the as1 file (the names'
+// classes), then, from the as1x file, one every OVSZ words, as1k.am1 (the
+// words' kinds and classes, the entries and the counts), as1f.am1 (the
+// flow, and the reports no other pass makes), as1l.am1 (the live
+// registers), as1g.am1, as1d.am1, as1h.am1 and as1e.am1 (the PDP-1 words of
+// the memory references; data, law, literals, sys and IOTs; the operate
+// instructions; the EAE ones), as1p.am1 (the sizes and the literals) and
+// as1o.am1 (the output).
+// The rules and the layout are those of as7am1's translate.c
+// (Tools/as7am1), applied to as's a.out, a.rel and n.out.
+// Needs unixsys.ah, octal and bank 2 set by the includer.
+
+// The memory map.
+// The tables are not in the image.
+// They lie from FLAGS to TOP, below the argument block, and each overlay
+// sets what it uses.
+#define OV      01460           // the overlays' area, past this part's end
+#define OVSZ    01440           // its size, the largest overlay's
+#define TOP     07700
+#define CBUF    (TOP-0400)      // the block cache, four blocks of 64 words
+#define LITS    (CBUF-0200)     // the literals, MAXLIT entries of two words
+#define MAXLIT  0100
+#define NCLS    LITS            // in as1 and as1k, the names' classes, six a word
+#define NNAMES  (0150*6)
+#define ITEMA   (LITS-040)      // one PDP-7 word's PDP-1 words, the word,
+#define ITEMB   (ITEMA-040)     // its operand to fill,
+#define ITEMC   (ITEMB-040)     // and an offset or a value
+#define MAXITEM 040
+#define WBUF    (ITEMC-0100)    // a block to write
+#define FLAGS   (OV+OVSZ)       // a flags word for each PDP-7 word of a.rel
+#define NMAX    (((WBUF-FLAGS-2)*020)/021)
+#define MAPT    (FLAGS+NMAX)    // the output, each 16 words' PDP-1 address
+
+// A flags word holds the kind, the class (an entry's count of the isz of its
+// return word in its place), the bits, the registers live after it and before
+// it (AC 1, MQ 2, the link 4; an entry's, live after its returns, in the
+// place of after), and the analysis's marks.
+// The generators replace the low nine bits with the word's shape.
+// That is its PDP-1 words; for a skip, FSKIP, the words before the skip in
+// 0700 and those after it in 077; for an entry, its rank.
+#define KMASK   0600000
+#define KDATA   0200000
+#define KARG    0400000
+#define KCODE   0600000
+#define CMASK   0160000
+#define CMEM    0020000
+#define CLAW    0040000
+#define COPR    0060000
+#define CEAE    0100000
+#define CSYS    0120000
+#define CIOT    0140000
+#define CLIT    0160000
+#define FENT    0010000         // a routine's return word, a jms's target
+#define FSTO    0004000         // stored into by dac or dzm
+#define FCNT    0002000         // an isz whose skip is kept
+#define FSKIP   0002000         // in the generators, the word has a skip
+#define FREL    0001000         // relocatable
+#define LOUT    0000700
+#define LIN     0000070
+#define FQ      0000004         // reached by the flow
+#define FNAMED  0000002         // named by a law or a data word
+#define FDONE   0000001         // reported
+#define FSIZE   0000077
+
+// a.rel's record word 0.
+#define RREL    0400000
+#define RBASE   0200000
+#define RONE    0100000
+#define RMINUS  0040000
+#define RSPAN   0020000
+#define RNAME   0010000
+
+// The files, by their place in cfd and in the cache's tags.
+#define FAOUT   0
+#define FAREL   1
+#define FNOUT   2
+#define FTMP    3
+#define FMSG    4               // as1x, the reports' texts at its start
+
+// The reports' texts, by their number in as1m.am1's table.
+#define M_WARN  0               // warning:
+#define M_ERRS  01              //  errors: nothing written
+#define M_JMSNR 02              // jms to a word that is not a routine's ...
+#define M_MULOP 03              // mul or div without its operand
+#define M_DEXEC 04              // a data word is executed
+#define M_REACH 05              // the flow reaches an argument or a reserved ...
+#define M_LAWT  06              // a small law added to by tad
+#define M_JMSLN 07              // an instruction on a jms's line
+#define M_FIRST 010             // a routine returning through its first word, ...
+#define M_OUTSD 011             // an address outside the program
+#define M_CODAT 012             // code read or written as data
+#define M_NUMAD 013             // a numeric address inside the program
+#define M_DIFFL 014             // an address computed from a difference ...
+#define M_LOWM  015             // a reference to low memory
+#define M_JMSP  016             // jms through a pointer
+#define M_JMPA  017             // jmp through an auto-index register
+#define M_ISZA  020             // isz through an auto-index register
+#define M_TADL  021             // tad's carry into the link is used
+#define M_RETV  022             // a routine's return word used as a value
+#define M_XCTA  023             // xct through an auto-index register
+#define M_SPAN  024             // a difference of two places spans code
+#define M_PTRO  025             // a pointer outside the program
+#define M_N4096 026             // a number from 4096 to 8191: kept as the number
+#define M_SYSR  027             // sys with a call number out of range
+#define M_SYSL  030             // sysloc
+#define M_IOT   031             // an IOT in a user program
+#define M_LONG  032             // a word's translation is too long
+#define M_SNLA  033             // a skip on the link and on AC in one word
+#define M_HLT   034             // hlt would stop the whole PDP-1
+#define M_EAEO  035             // an EAE operand of 0400000 or more
+#define M_EAEM  036             // an EAE multiply or divide other than ...
+#define M_EAEA  037             // an EAE absolute value or sign operation
+#define M_CMOR  040             // complement MQ and OR MQ into AC in one word
+#define M_EAES  041             // the EAE step counter read into AC
+#define M_EAEU  042             // unknown EAE setup bits
+#define M_USHF  043             // an unsigned long right shift of 18 places ...
+#define M_NORM  044             // the EAE normalize
+#define M_XCT   045             // xct of a word that is not one PDP-1 word
+#define MSGSZ   01300           // as1m's words, rounded up to a block
+
+// The overlays in the as1x file, after the texts, by their number for ovload.
+#define OVK     0               // as1k.am1, kinds, classes, entries, counts
+#define OVF     1               // as1f.am1, the flow, its reports
+#define OVL     2               // as1l.am1, the live registers
+#define OVG     3               // as1g.am1, memory references
+#define OVD     4               // as1d.am1, data, law, literals, sys, IOTs
+#define OVH     5               // as1h.am1, operate instructions
+#define OVE     6               // as1e.am1, EAE instructions
+#define OVP     7               // as1p.am1, sizes, literals, layout
+#define OVO     010             // as1o.am1, the output
+
+// The streams in as1t, one a generator, by their number for sopen.
+#define SMEM    0
+#define SDAT    1
+#define SOPR    2
+#define SEAE    3
+
+// PDP-7 memory reference opcodes.
+#define ODAC    0040000
+#define OJMS    0100000
+#define ODZM    0140000
+#define OLAC    0200000
+#define OXOR    0240000
+#define OADD    0300000
+#define OTAD    0340000
+#define OXCT    0400000
+#define OISZ    0440000
+#define OAND    0500000
+#define OSAD    0540000
+#define OJMP    0600000
+
+// The PDP-1 words the generators make.
+#define P_AND   0020000
+#define P_IOR   0040000
+#define P_XOR   0060000
+#define P_XCT   0100000
+#define P_CAL   0160000
+#define P_JDA   0170000
+#define P_LAC   0200000
+#define P_LIO   0220000
+#define P_DAC   0240000
+#define P_DAP   0260000
+#define P_DIO   0320000
+#define P_DZM   0340000
+#define P_ADD   0400000
+#define P_SUB   0420000
+#define P_IDX   0440000
+#define P_SAD   0500000
+#define P_SAS   0520000
+#define P_MUL   0540000
+#define P_DIV   0560000
+#define P_JMP   0600000
+#define P_LAW   0700000
+#define P_I     0010000
+#define P_SZA   0640100
+#define P_SPA   0640200
+#define P_SMA   0640400
+#define P_SPI   0642000
+#define P_RAL   0661000
+#define P_RCL   0663000
+#define P_SAL   0665000
+#define P_SCL   0667000
+#define P_RIGHT 0010000         // a left shift's code plus this is its right one
+#define P_CLA   0760200
+#define P_CMA   0761000
+#define P_CLI   0764000
+#define P_LAT   0762200
+#define P_HLT   0760400
+#define P_LIA   0760020
+#define P_LAI   0760040
+#define P_SWP   0760060
+#define P_NOP   0760000
+#define X_LNK   020             // as7am1's words for the link, AC, IO and a temporary
+#define X_AC    021
+#define X_IO    022
+#define X_T     023
+
+// An item's operand (ITEMB) is ORed into its word (ITEMA).
+// It is none (0); the PDP-1 address of the PDP-7 word in the low bits; that
+// of a base word there plus the offset ITEMC; the address of the literal
+// whose value is ITEMC (TLIT+1 for the text [1]); or the item's address
+// plus 2.
+// In the stream an item is its word, its operand, and ITEMC after TBASE and
+// TLIT.
+#define TMAP    0100000
+#define TBASE   0200000
+#define TLIT    0300000
+#define TDOT2   0400000
+
+0/
+        jmp go
+0100/
+        SYSFRAME()
+0110/
+
+// The start.
+// a.rel, a.out and n.out are opened, their sizes taken, and the first
+// overlay run.
+go,
+        dzm lpos
+        dzm nerr
+        dzm nwarn
+        dzm ovfd
+        dzm fdtw
+        dzm nlit
+        dzm lone
+        dzm llong
+        lac [n_arel]
+        jda open
+        dac fdrel
+        sma                         // skip if a.rel is missing
+        jmp go1
+        lac [m_arel]
+        jmp fatal
+go1,
+        lac [n_aout]
+        jda open
+        dac fdout
+        sma
+        jmp go2
+        lac [m_aout]
+        jmp fatal
+go2,
+        lac [n_nout]
+        jda open
+        dac fdnout
+        sma
+        jmp go3
+        lac [m_nout]
+        jmp fatal
+
+        // as's errors refused.
+go3,
+        jda cinval
+        cla
+        lio [FAREL]
+        jda cget
+        sza i                       // skip if as counted errors
+        jmp go4
+        lac [m_aserr]
+        jmp fatal
+
+        // NW, a.rel's records, at most NMAX.
+        // a.out ends at the last word stored.
+        // The names, NNAMES at most.
+go4,
+        lac fdrel
+        jda fsize
+        sub [0100]
+        sar 2s
+        dac nw
+        sub [NMAX+1]
+        spa                         // skip if too big
+        jmp go5
+go6,
+        lac [m_big]
+        jmp fatal
+go5,
+        lac fdnout
+        jda fsize
+        dac nnout
+        sub [NNAMES*6+1]
+        sma                         // skip if not too many names
+        jmp go6
+
+        // NK, the program's span, from n.out's first entry, the final "."; the
+        // first overlay takes it past the last word stored.
+        lac [5]
+        lio [FNOUT]
+        jda cget
+        dac nk
+        jmp OV
+
+// Prints the message at AC, removes as1t if it was made, and exits.
+// Entry: AC = the message's address.
+// Entered by jmp; does not return.
+fatal,
+        jda puts
+        lac [012]
+        jda putc
+        jda tmpdel
+exit,
+        cal SYSEXIT
+
+// The generators' file, as1t, made empty, and opened to write (fdtw) and to
+// read (fdtmp).
+// creat takes the new file's modes from AC, as in 1970.
+// They are as's 017, so that the owner can read the file back.
+// If as1t cannot be made or opened, as1 stops with "as1t ?".
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+tmpmk,  0
+        dap tmpmkx
+        lac [017]
+        cal SYSCREAT
+        n_tmp
+        dac fdtw
+        sma                         // skip if as1t cannot be made
+        jmp tm1
+        dzm fdtw
+tm2,
+        lac [m_tmp]
+        jmp fatal
+tm1,
+        lac [n_tmp]
+        jda open
+        dac fdtmp
+        spa                         // skip if as1t opened to read
+        jmp tm2
+tmpmkx, jmp .
+
+// as1t closed and removed, if it was made.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+tmpdel, 0
+        dap tmpdelx
+        lac fdtw
+        sza i
+        jmp tmpdelx
+        cal SYSCLOSE
+        lac fdtmp
+        cal SYSCLOSE
+        cal SYSUNLINK
+        n_tmp
+        dzm fdtw
+tmpdelx, jmp .
+
+// Opens a file to read, or to write (openw), without truncating it.
+// Entry: AC = the address of its four-word name.
+// Exit: AC = the descriptor, negative when it cannot be opened.
+// IO is preserved.
+// Called via jda.
+open,   0
+        dap openx
+        dzm openm
+        jmp open0
+openw,  0
+        dap openx
+        lac openw
+        dac open
+        lac [1]
+        dac openm
+open0,
+        lac open
+        dap open1
+        cal SYSOPEN
+open1,  0
+openm,  0
+openx,  jmp .
+
+// A file's size in words, the file left at its end.
+// Entry: AC = its descriptor, open to read.
+// Exit: AC = the size.
+// IO is preserved.
+// Called via jda.
+fsize,  0
+        dap fsizex
+        lac fsize
+        cal SYSSEEK
+        0
+        2
+fsizex, jmp .
+
+// The cache emptied.
+// AC is ignored on entry and clobbered; IO is preserved.
+// Called via jda.
+cinval, 0
+        dap cinvalx
+        law i 1
+        dac ctag
+        dac ctag+1
+        dac ctag+2
+        dac ctag+3
+cinvalx, jmp .
+
+// One word of a file, through the cache.
+// The cache is four blocks of 64 words, the least recently used one
+// replaced.
+// Entry: AC = the word's place in the file, IO = the file (FAOUT, FAREL,
+// FNOUT, FTMP or FMSG).
+// Exit: AC = the word, 0 past the end.
+// IO is clobbered.
+// Called via jda.
+cget,   0
+        dap cgetx
+        dio cgf
+        lac cget
+        and [077]
+        dac cgoff
+        lac cget
+        sar 6s
+        dac cgblk
+        lac cgf
+        sal 9s
+        ior cgblk
+        dac cgtag
+
+        // A slot whose tag matches, else the oldest.
+        law i 4
+        dac cgn
+        law ctag
+        dac cgp
+        dac cgslot
+        lac [0377777]
+        dac cgold
+cg1,
+        lac i cgp
+        sad cgtag
+        jmp cg5                     // found
+        lac cgp
+        add [cstamp-ctag]
+        dac cgq
+        lac i cgq
+        sub cgold
+        sma                         // skip if older
+        jmp cg3
+        lac i cgq
+        dac cgold
+        lac cgp
+        dac cgslot
+cg3,
+        idx cgp
+        isp cgn
+        jmp cg1
+
+        // On a miss, the block is read into the oldest slot, cleared first
+        // so that the words past the end are 0.
+        lac cgslot
+        dac cgp
+        lac cgtag
+        dac i cgp
+        jda cgbuf
+        dac cgq
+        dac cgrd
+        law i 0100
+        dac cgn
+cg4,
+        dzm i cgq
+        idx cgq
+        isp cgn
+        jmp cg4
+        lac cgf
+        add [cfd]
+        dap cg6
+cg6,    lac 0
+        dac cgfd
+        lac cgblk
+        sal 6s
+        dac cgsk
+        lac cgfd
+        cal SYSSEEK
+cgsk,   0
+        0
+        lac cgfd
+        cal SYSREAD
+cgrd,   0
+        0100
+
+        // The slot stamped and the word read.
+cg5,
+        idx cclock
+        lac cgp
+        add [cstamp-ctag]
+        dac cgq
+        lac cclock
+        dac i cgq
+        jda cgbuf
+        add cgoff
+        dac cgq
+        lac i cgq
+cgetx,  jmp .
+
+// The buffer of the slot whose tag is at cgp.
+// Entry: cgp = the tag's address; AC is ignored.
+// Exit: AC = the buffer's address.
+// IO is preserved.
+// Called via jda.
+cgbuf,  0
+        dap cgbufx
+        lac cgp
+        sub [ctag]
+        sal 6s
+        add [CBUF]
+cgbufx, jmp .
+
+// The a.out word of PDP-7 word k.
+// Entry: AC = k.
+// Exit: AC = the word, 0 past the words stored.
+// IO is clobbered.
+// Called via jda.
+getv,   0
+        dap getvx
+        lac getv
+        lio [FAOUT]
+        jda cget
+getvx,  jmp .
+
+// Word j of a.rel's record for word k.
+// Entry: AC = k, IO = j.
+// Exit: AC = the word, 0 past the records.
+// IO is clobbered.
+// Called via jda.
+getr,   0
+        dap getrx
+        dio grj
+        lac getr
+        sal 2s
+        add grj
+        add [0100]
+        lio [FAREL]
+        jda cget
+getrx,  jmp .
+
+// The flags of PDP-7 word k.
+// Entry: AC = k.
+// Exit: AC = the flags, 0 (a reserved word) where k is not one of a.out's
+// words, and fptr = the flags word's address (fdummy for such a k, so that a
+// store there is lost).
+// IO is preserved.
+// Called via jda.
+getf,   0
+        dap getfx
+        lac getf
+        spa
+        jmp getf1
+        sub nw
+        sma                         // skip if one of a.out's words
+        jmp getf1
+        lac getf
+        add [FLAGS]
+        dac fptr
+        lac i fptr
+getfx,  jmp .
+getf1,
+        lac [fdummy]
+        dac fptr
+        dzm fdummy
+        cla
+        jmp getfx
+
+// The kind of word k (KDATA, KARG, KCODE, or 0 for a reserved word or one
+// outside a.out).
+// Entry: AC = k.
+// Exit: AC = the kind.
+// IO is preserved.
+// Called via jda.
+kind,   0
+        dap kindx
+        lac kind
+        jda getf
+        and [KMASK]
+kindx,  jmp .
+
+// The number of arguments after word k, the ARG words that follow it.
+// Entry: AC = k.
+// Exit: AC = the count.
+// IO is preserved.
+// Called via jda.
+nargs,  0
+        dap nargsx
+        dzm nan
+na1,
+        idx nargs
+        jda kind
+        sad [KARG]
+        jmp na2
+        lac nan
+nargsx, jmp .
+na2,
+        idx nan
+        jmp na1
+
+// 1 when word k is a routine's entry.
+// Entry: AC = k.
+// Exit: AC = 1 or 0.
+// IO is preserved.
+// Called via jda.
+isent,  0
+        dap isentx
+        lac isent
+        jda getf
+        and [FENT]
+        sza
+        lac [1]
+isentx, jmp .
+
+// Unsigned divide.
+// Entry: AC = the dividend, IO = the divisor, less than 0400000.
+// Exit: AC = the quotient, IO = the remainder.
+// AC and IO are both results, neither is preserved.
+// Called via jda.
+udiv,   0
+        dap udivx
+        dio udd
+        lio udiv
+        cla
+        scl 1s
+        div udd
+        jmp .+1
+udivx,  jmp .
+
+// Reports an error, or a warning (repwarn), at word k.
+// It prints "file:line: text", or, for a word as did not store, the word's
+// PDP-7 address in place of file and line.
+// Entry: AC = k, IO = the text's number (the M_ defines; the texts are in
+// as1x).
+// AC and IO are clobbered.
+// Called via jda.
+report, 0
+        dap reptx
+        idx nerr
+        dzm repw
+        jmp rep1
+repwarn, 0
+        dap reptx
+        lac repwarn
+        dac report
+        idx nwarn
+        lac [1]
+        dac repw
+rep1,
+        dio reptxt
+        lio [0]
+        lac report
+        jda getr
+        dac rep0
+        sza i                       // skip if stored
+        jmp rep4
+
+        // The file's name, from a.rel's head.
+        lio [1]
+        lac report
+        jda getr
+        sar 9s
+        sar 3s
+        and [017]
+        sal 2s
+        add [6]
+        dac repn
+        law i 4
+        dac repc
+rep2,
+        lac repn
+        lio [FAREL]
+        jda cget
+        dac repv
+        sar 9s
+        and [0177]
+        sad [040]
+        jmp rep3                    // a space ends the name
+        jda putc
+        lac repv
+        and [0177]
+        sad [040]
+        jmp rep3
+        jda putc
+        idx repn
+        isp repc
+        jmp rep2
+rep3,
+        lac [072]
+        jda putc
+        lac rep0
+        and [07777]
+        jda putd
+        jmp rep5
+
+        // For a word not stored, its PDP-7 address.
+rep4,
+        lac report
+        add [010000]
+        jda puto
+rep5,
+        lac [072]
+        jda putc
+        lac [040]
+        jda putc
+        lac repw
+        sza i
+        jmp rep6
+        lac [M_WARN]
+        jda putm
+rep6,
+        lac reptxt
+        jda putm
+        lac [012]
+        jda putc
+reptx,  jmp .
+
+// One character to the terminal, file 1, a line at a time.
+// Entry: AC = the character.
+// AC and IO are clobbered.
+// Called via jda.
+putc,   0
+        dap putcx
+        lac lpos
+        sar 1s
+        add [lbuf]
+        dac pcp
+        lac lpos
+        and [1]
+        sza
+        jmp pc1
+        lac putc
+        sal 9s
+        dac i pcp
+        jmp pc2
+pc1,
+        lac putc
+        ior i pcp
+        dac i pcp
+pc2,
+        idx lpos
+        lac putc
+        sas [012]
+        jmp putcx
+        lac lpos
+        add [1]
+        sar 1s
+        dap pcn
+        lac [1]
+        cal SYSWRITE
+        lbuf
+pcn,    0
+        dzm lpos
+putcx,  jmp .
+
+// A text to the terminal.
+// Entry: AC = its address.
+// The text is two characters a word, ended by a 0 character.
+// AC and IO are clobbered.
+// Called via jda.
+puts,   0
+        dap putsx
+        lac puts
+        dac psp
+ps1,
+        lac i psp
+        sar 9s
+        and [0177]
+        sza i
+        jmp putsx
+        jda putc
+        lac i psp
+        and [0177]
+        sza i
+        jmp putsx
+        jda putc
+        idx psp
+        jmp ps1
+putsx,  jmp .
+
+// Text n of the reports', from the start of as1x, to the terminal.
+// Word n of as1x is the text's place.
+// Entry: AC = n.
+// AC and IO are clobbered.
+// Called via jda.
+putm,   0
+        dap putmx
+        lac putm
+        lio [FMSG]
+        jda cget
+        dac pmp
+pm1,
+        lac pmp
+        lio [FMSG]
+        jda cget
+        dac pmw
+        sar 9s
+        and [0177]
+        sza i
+        jmp putmx
+        jda putc
+        lac pmw
+        and [0177]
+        sza i
+        jmp putmx
+        jda putc
+        idx pmp
+        jmp pm1
+putmx,  jmp .
+
+// A number to the terminal in decimal.
+// Entry: AC = the number, positive.
+// AC and IO are clobbered.
+// Called via jda.
+putd,   0
+        dap putdx
+        lac putd
+        dzm pdn
+pd1,
+        lio [012]
+        jda udiv
+        dac pdq
+        lac pdn
+        add [pdbuf]
+        dac pdp
+        dio i pdp
+        idx pdn
+        lac pdq
+        sza
+        jmp pd1
+pd2,
+        lac pdp
+        sub [pdbuf]
+        dac pdn
+        lac i pdp
+        add [060]
+        jda putc
+        law i 1
+        add pdp
+        dac pdp
+        lac pdn
+        sza
+        jmp pd2
+putdx,  jmp .
+
+// A number to the terminal in octal, six digits.
+// Entry: AC = the number.
+// AC and IO are clobbered.
+// Called via jda.
+puto,   0
+        dap putox
+        lio puto
+        law i 6
+        dac pdn
+po1,
+        cla
+        rcl 3s
+        add [060]
+        dio pdq
+        jda putc
+        lio pdq
+        isp pdn
+        jmp po1
+putox,  jmp .
+
+// Overlay n read from the as1x file over the one at OV, and run.
+// as1x holds the reports' texts, MSGSZ words, then an overlay every OVSZ
+// words.
+// As sh does for a command, as1x is linked from system when the current
+// directory has none, and unlinked once it is open.
+// If as1x cannot be opened, as1 stops with "as1x ?".
+// Entry: AC = n.
+// Entered by jmp; does not return.
+ovload,
+        dac ovn
+        jda cinval
+        lac ovfd
+        sza
+        jmp ov3
+        lac [n_as1x]
+        jda open
+        sma                         // skip if not here
+        jmp ov2
+        cal SYSLINK
+        n_system
+        n_as1x
+        n_as1x
+        lac [n_as1x]
+        jda open
+        dac ovfd
+        cal SYSUNLINK
+        n_as1x
+        lac ovfd
+        sma
+        jmp ov2
+        lac [m_as1x]
+        jmp fatal
+ov2,
+        dac ovfd
+ov3,
+        lac [MSGSZ]
+        dac ovsk
+ov4,
+        lac ovn
+        sza i
+        jmp ov5
+        sub [1]
+        dac ovn
+        lac ovsk
+        add [OVSZ]
+        dac ovsk
+        jmp ov4
+ov5,
+        lac ovfd
+        cal SYSSEEK
+ovsk,   0
+        0
+        lac ovfd
+        cal SYSREAD
+        OV
+        OVSZ
+        jmp OV
+
+// A word to the stream the generators write, to as1t through fdrw from
+// where it was seeked.
+// Entry: AC = the word.
+// AC and IO are clobbered.
+// Called via jda.
+swr,    0
+        dap swrx
+        lac swn
+        and [077]
+        add [WBUF]
+        dac swpt
+        lac swr
+        dac i swpt
+        idx swn
+        and [077]
+        sza
+        jmp swrx
+        lac fdrw
+        cal SYSWRITE
+        WBUF
+        0100
+swrx,   jmp .
+
+// The stream's last words written.
+// AC is ignored on entry.
+// AC and IO are clobbered.
+// Called via jda.
+sflush, 0
+        dap sflushx
+        lac swn
+        and [077]
+        sza i
+        jmp sflushx
+        dap sfn
+        lac fdrw
+        cal SYSWRITE
+        WBUF
+sfn,    0
+sflushx, jmp .
+
+// The common words, kept from one overlay to the next.
+nw,     0                           // a.out's words, and so a.rel's records
+nk,     0                           // the program's span, reserved words too
+nnout,  0                           // n.out's words
+lastk,  0                           // the last word stored
+cfd,                                // the descriptors by file, a.out, a.rel,
+fdout,  0                           // n.out, as1t (to read)
+fdrel,  0
+fdnout, 0
+fdtmp,  0
+ovfd,   0                           // and as1x
+fdtw,   0                           // as1t, to write
+fdrw,   0                           // the file the stream is written to
+sbase,  0; 0; 0; 0; 0               // each stream's place in as1t, and the end
+swn,    0                           // the words written to the stream
+nerr,   0
+nwarn,  0
+nlit,   0                           // the literals
+lone,   0                           // 1 written as [1]
+llong,  0                           // and as [0000001]
+nent,   0                           // the routines' entries
+origin, 0                           // the program's PDP-1 address
+kv,     0
+fptr,   0
+fdummy, 0
+lpos,   0                           // characters in lbuf
+ovn,    0
+pmp,    0
+pmw,    0
+
+cgf,    0
+cgoff,  0
+cgblk,  0
+cgtag,  0
+cgn,    0
+cgp,    0
+cgq,    0
+cgslot, 0
+cgold,  0
+cgfd,   0
+cclock, 0
+ctag,   0; 0; 0; 0                  // each slot's file and block, -1 empty
+cstamp, 0; 0; 0; 0                  // and when it was last used
+grj,    0
+nan,    0
+udd,    0
+repw,   0
+reptxt, 0
+rep0,   0
+repn,   0
+repc,   0
+repv,   0
+pcp,    0
+psp,    0
+pdn,    0
+pdq,    0
+pdp,    0
+pdbuf,  0; 0; 0; 0; 0; 0; 0
+swpt,   0
+lbuf,
+        table 050
+
+m_arel, 0141056; 0162145; 0154040; 0077000              // "a.rel ?"
+m_aout, 0141056; 0157165; 0164040; 0077000              // "a.out ?"
+m_nout, 0156056; 0157165; 0164040; 0077000              // "n.out ?"
+m_as1x, 0141163; 0061170; 0040077; 0000000              // "as1x ?"
+m_aserr,0141163; 0040146; 0157165; 0156144; 0040145; 0162162 // "as found errors"
+        0157162; 0163000
+m_big,  0164157; 0157040; 0142151; 0147000              // "too big"
+n_arel, 0141056; 0162145; 0154040; 0040040              // "a.rel   "
+n_aout, 0141056; 0157165; 0164040; 0040040              // "a.out   "
+n_nout, 0156056; 0157165; 0164040; 0040040              // "n.out   "
+m_tmp,  0141163; 0061164; 0040077; 0000000              // "as1t ?"
+n_tmp,  0141163; 0061164; 0040040; 0040040              // "as1t    "
+n_system,0163171; 0163164; 0145155; 0040040             // "system  "
+n_as1x, 0141163; 0061170; 0040040; 0040040              // "as1x    "
+
+        constants
