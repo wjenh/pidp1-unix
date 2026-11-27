@@ -1,0 +1,385 @@
+ibmread
+// Copy an IBM file by name, or read a raw record using three decimal numbers.
+#include "unixsys.ah"
+        bank 2
+0/      jmp main
+0100/   SYSFRAME()
+0110/
+main,   lac 07777
+        add [5]
+        dac argptr
+        lac i 07777
+        sad [0d12]
+        jmp filePath
+        sad [0d16]
+        jmp threeArgs
+        sas [0d20]
+        jmp usage
+        idx save
+        jmp raw
+threeArgs,
+        lac i argptr
+        sar 9s
+        and [0777]
+        sub [060]
+        spa
+        jmp fileNames
+        sub [0d10]
+        sma
+        jmp fileNames
+raw,    jsp number
+        sub [0d10]
+        sma
+        jmp usage
+        add [0d10]
+        sal 3s
+        dac selector
+        jsp number
+        dac track
+        jsp number
+        sza i
+        jmp usage
+        sub [6]
+        sma
+        jmp usage
+        add [6]
+        ior selector
+        lia
+        lac track
+        cal SYSIBMREAD
+        data
+        sza
+        jmp failed
+        law data
+        dac cursor
+        law i IBRECWORDS
+        dac remaining
+        law textBuffer
+        dac digitptr
+print,  lio i cursor
+        law i 3
+        dac pairs
+pair,   cla
+        scl 3s
+        and [7]
+        add [060]
+        sal 9s
+        dac digits
+        cla
+        scl 3s
+        and [7]
+        add [060]
+        ior digits
+        dac i digitptr
+        idx digitptr
+        isp pairs
+        jmp pair
+        law 012
+        dac i digitptr
+        idx digitptr
+        idx cursor
+        isp remaining
+        jmp print
+        lac save
+        sza
+        jmp saveRecord
+        law 1
+        cal SYSWRITE
+        textBuffer; IBTEXTWORDS
+        cal SYSEXIT
+saveRecord, lac argptr
+        dac fileArg
+        law textBuffer
+        cal SYSIBMSAVE
+fileArg,0
+saveResult,
+        sza i
+        cal SYSEXIT
+        sad [-2]
+        jmp exists
+        sad [-3]
+        jmp noRoom
+        sad [-4]
+        jmp isDirectory
+        sad [-5]
+        jmp denied
+        jmp saveError
+
+// The shell passes fixed-width, space-padded eight-character arguments.
+number, dap numberReturn
+        dzm value
+        dzm count
+        dzm padding
+        law i 4
+        dac words
+numword,lac i argptr
+        dac sourceword
+        sar 9s
+        and [0777]
+        jda digit
+        lac sourceword
+        and [0777]
+        jda digit
+        idx argptr
+        isp words
+        jmp numword
+        lac count
+        sza i
+        jmp usage
+        lac value
+numberReturn,jmp .
+digit, 0
+        dap digitReturn
+        lac digit
+        sad [040]
+        jmp space
+        lac padding
+        sza
+        jmp usage
+        lac digit
+        sub [060]
+        spa
+        jmp usage
+        sub [0d10]
+        sma
+        jmp usage
+        add [0d10]
+        dac nextdigit
+        idx count
+        sub [5]
+        sma
+        jmp usage
+        lac value
+        sal 2s
+        add value
+        sal 1s
+        add nextdigit
+        dac value
+digitReturn,jmp .
+space,  law 1
+        dac padding
+        jmp digitReturn
+
+usage, law 1
+        cal SYSWRITE
+        usageText; usageEnd-usageText
+        cal SYSEXIT
+failed,law 1
+        cal SYSWRITE
+        failureText; failureEnd-failureText
+        cal SYSEXIT
+exists, law 1
+        cal SYSWRITE
+        existsText; existsEnd-existsText
+        cal SYSEXIT
+noRoom, law 1
+        cal SYSWRITE
+        roomText; roomEnd-roomText
+        cal SYSEXIT
+saveError,law 1
+        cal SYSWRITE
+        saveText; saveEnd-saveText
+        cal SYSEXIT
+isDirectory,law 1
+        cal SYSWRITE
+        directoryText; directoryEnd-directoryText
+        cal SYSEXIT
+denied, law 1
+        cal SYSWRITE
+        deniedText; deniedEnd-deniedText
+        cal SYSEXIT
+usageText, ascii "usage: ibmread path newfile (or directory file newfile)\n"
+           ascii "       ibmread module track record [newfile]\n"
+usageEnd,
+failureText, ascii "ibmread: read failed\n"
+failureEnd,
+existsText, ascii "ibmread: destination already exists\n"
+existsEnd,
+roomText, ascii "ibmread: not enough drum space\n"
+roomEnd,
+saveText, ascii "ibmread: could not save to drum\n"
+saveEnd,
+directoryText, ascii "ibmread: source is a directory\n"
+directoryEnd,
+deniedText, ascii "ibmread: permission denied\n"
+deniedEnd,
+save,0
+argptr,0
+track,0
+selector,0
+cursor,0
+remaining,0
+digitptr,0
+pairs,0
+digits,0
+value,0
+count,0
+padding,0
+words,0
+sourceword,0
+nextdigit,0
+textBuffer,
+        table IBTEXTWORDS,0
+data,
+        table IBRECWORDS,0
+
+// For an unqualified name or a slash path, unpack the shell's eight
+// characters once. A slash starts a new directory lookup.
+filePath,lac argptr
+        add [4]
+        dac copyArg
+        law path
+        dac charPtr
+        law i 4
+        dac pathCount
+unpackPath,
+        lac i argptr
+        dac sourceword
+        sar 9s
+        and [0777]
+        dac i charPtr
+        idx charPtr
+        lac sourceword
+        and [0777]
+        dac i charPtr
+        idx charPtr
+        idx argptr
+        isp pathCount
+        jmp unpackPath
+        law path
+        dac charPtr
+        law 4
+        dac directory
+pathPart,
+        dzm delim
+        law part
+        dac lookupName
+        dac partPtr
+        law i 4
+        dac pathCount
+packPart,jsp pathChar
+        sal 9s
+        dac packed
+        jsp pathChar
+        ior packed
+        dac i partPtr
+        idx partPtr
+        isp pathCount
+        jmp packPart
+        lac part
+        sad [040040]
+        jmp usage
+        jsp findFile
+        lac delim
+        sad [1]
+        jmp enterPath
+        jmp copyFile
+enterPath,
+        jsp enterDirectory
+        jmp pathPart
+
+pathChar,dap pathCharReturn
+        lac delim
+        sza
+        jmp padPart
+        lac i charPtr
+        sza i
+        jmp endPart
+        sad [040]
+        jmp endPart
+        sad [057]
+        jmp slashPart
+        dac nextdigit
+        idx charPtr
+        lac nextdigit
+        jmp pathCharReturn
+slashPart,idx charPtr
+        law 1
+        jmp saveDelim
+endPart,law 2
+saveDelim,dac delim
+padPart,law 040
+pathCharReturn,jmp .
+
+// The three-name form avoids the shell's eight-character limit for a path.
+fileNames,
+        lac argptr
+        add [0d8]
+        dac copyArg
+        law 4
+        dac directory
+        lac argptr
+        dac lookupName
+        jsp findFile
+        jsp enterDirectory
+        lac argptr
+        add [4]
+        dac lookupName
+        jsp findFile
+copyFile,
+        lio directory
+        lac index
+        sub [1]
+        cal SYSIBMCOPY
+copyArg,0
+        jmp saveResult
+
+enterDirectory,dap enterReturn
+        lac ibEntry+5
+        sad [2]
+        jmp denied
+        sza i
+        jmp failed
+        lac ibEntry
+        dac directory
+enterReturn,jmp .
+
+findFile,dap findReturn
+        dzm index
+findNext,
+        lio directory
+        lac index
+        cal SYSIBMLIST
+        ibEntry
+        sad [-5]
+        jmp denied
+        sza i
+        jmp failed
+        spa
+        jmp failed
+        idx index
+        lac ibEntry
+        sza i
+        jmp findNext
+        law ibEntry+1
+        dac compareEntry
+        lac lookupName
+        dac compareName
+        law i 4
+        dac pathCount
+comparePart,
+        lac i compareEntry
+        sas i compareName
+        jmp findNext
+        idx compareEntry
+        idx compareName
+        isp pathCount
+        jmp comparePart
+findReturn,jmp .
+
+charPtr,0
+pathCount,0
+delim,0
+packed,0
+directory,0
+lookupName,0
+partPtr,0
+index,0
+compareEntry,0
+compareName,0
+path,
+        table 0d9,0
+part,0;0;0;0
+ibEntry,0;0;0;0;0;0
+constants
+start main

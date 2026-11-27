@@ -1,0 +1,267 @@
+// sys 040; buffer. AC is the entry index, IO is the directory i-number.
+// AC returns 1 for an entry, 0 at end, -1 on error or -5 on denied access.
+// Six returned words: i-number, four name words, and marker (0 file,
+// 1 readable directory, 2 unreadable directory). Unused entries are zero.
+// This call never copies inode data or raw blocks out of the kernel.
+sysIBMList,
+        jda arg
+        dac ilDest
+        and [07777]
+        sas ilDest
+        jmp error
+        sub [0110]
+        spa
+        jmp error
+        lac ilDest
+        sub [BANKW-6+1]
+        sma
+        jmp error
+        lac ilDest
+        jda uptr
+        dac ilDest
+        jsp ilResolve
+        sza i
+        jmp okexit
+        lac [ilResult]
+        dac cpSrc
+        lac ilDest
+        dac cpDst
+        law 6
+        jda copy
+        law 1
+ilExit, dac uAc
+        jmp sysexit
+
+// Resolve an index in the caller's readable directory. A live entry
+// leaves its IBM i-node loaded. A zero result means end of directory.
+ilResolve,dap ilResolveReturn
+        lac uAc
+        spa
+        jmp error
+        sub [MAXSIZE/DIRSZ]
+        sma
+        jmp error
+        lac uAc
+        sal 3s
+        dac ilOffset
+        lac uMq
+        jda ilInode
+        lac ilFlags
+        and [IUSED+IDIR+ISPEC]
+        sas [IUSED+IDIR]
+        jmp error
+        jsp ilReadable
+        sza i
+        jmp ilDenied
+        lac ilNode
+        add [0d10]
+        dac ilPtr
+        lac i ilPtr
+        dac ilSize
+        and [7]
+        sza
+        jmp error
+        lac ilSize
+        spa
+        jmp error
+        sub [MAXSIZE]
+        sma sza
+        jmp error
+        lac ilOffset
+        sub ilSize
+        sma
+        jmp ilEnd
+        jsp ilLocate
+        jmp ilEntryBlock
+
+// Load the file block containing ilOffset from the current IBM i-node.
+ilLocate,dap ilLocateReturn
+        lac ilOffset
+        sar 6s
+        dac ilBlock
+        lac ilFlags
+        and [ILARGE]
+        sza
+        jmp ilIndirect
+        lac ilBlock
+        jmp ilDirect
+ilIndirect,lac ilBlock
+        sar 6s
+ilDirect,
+        sub [NDSKPS]
+        sma
+        jmp ilHole
+        add [NDSKPS+1]
+        add ilNode
+        dac ilPtr
+        lac i ilPtr
+        jda ilData
+        lac ilFlags
+        and [ILARGE]
+        sza i
+        jmp ilLocateReturn
+        lac ilBlock
+        and [077]
+        add [ibBuffer]
+        dac ilPtr
+        lac i ilPtr
+        jda ilData
+ilLocateReturn,jmp .
+ilEntryBlock,
+        lac ilOffset
+        and [077]
+        add [ibBuffer]
+        dac ilEntry
+        lac i ilEntry
+        sza i
+        jmp ilEmpty
+        lac ilEntry
+        dac cpSrc
+        lac [ilResult]
+        dac cpDst
+        law 6
+        jda copy
+        lac ilResult
+        jda ilInode
+        lac ilNode
+        add [0d11]
+        dac ilPtr
+        lac i ilPtr
+        sas ilResult+5
+        jmp ilEmpty
+        dzm ilResult+5
+        lac ilFlags
+        and [IUSED+IDIR+ISPEC]
+        sas [IUSED+IDIR]
+        jmp ilReturn
+        jsp ilReadable
+        sza
+        jmp ilAllowed
+        law 2
+ilAllowed,dac ilResult+5
+ilReturn,law 1
+ilResolveReturn,jmp .
+ilEmpty,lac [ilResult]
+        dac cpDst
+        law 6
+        jda copyz
+        jmp ilReturn
+ilEnd,cla
+        jmp ilResolveReturn
+ilDenied,law i 5
+        jmp ilExit
+
+// An inode is five per block, 12 words each. Remember its core location.
+ilInode,0
+        dap ilINReturn
+        lac ilInode
+        spa
+        jmp ilFault
+        sza i
+        jmp ilFault
+        sub [NINODE]
+        sma
+        jmp ilFault
+        lio ilInode
+        cla
+        scl 1s
+        div [5]
+        jmp ilFault
+        add [2]
+        dac ilInodeBlock
+        lai
+        sal 1s
+        dac ilNode
+        sal 1s
+        add ilNode
+        sal 1s
+        add [ibBuffer]
+        dac ilNode
+        lac ilInodeBlock
+        jda ilRead
+        lac i ilNode
+        dac ilFlags
+ilINReturn,jmp .
+
+// Match V0's normal access() rule, owner read or others read.
+ilReadable,dap ilAccessReturn
+        lac uUid
+        spa
+        jmp ilYes
+        lac ilNode
+        add [0d8]
+        dac ilPtr
+        lac uUid
+        sas i ilPtr
+        jmp ilWorld
+        lac ilFlags
+        and [010]
+        jmp ilAccess
+ilWorld,lac ilFlags
+        and [FREAD]
+ilAccess,sza i
+        jmp ilAccessReturn
+ilYes,  law 1
+ilAccessReturn,jmp .
+
+ilData,0
+        dap ilDataReturn
+        lac ilData
+        sza i
+        jmp ilDataHole
+        sub [0d52]
+        spa
+        jmp ilFault
+        lac ilData
+        jda ilRead
+ilDataReturn,jmp .
+ilDataHole,jsp ilClearHole
+        jmp ilDataReturn
+ilHole, jsp ilClearHole
+        jmp ilLocateReturn
+ilClearHole,dap ilHoleReturn
+        lac ibCopyActive
+        sza i
+        jmp ilFault
+        lac [ibBuffer]
+        dac cpDst
+        law BLKW
+        jda copyz
+ilHoleReturn,jmp .
+
+// Map a logical V0 block to one default IBM record in module zero.
+ilRead,0
+        dap ilReadReturn
+        lac ilRead
+        sub [FSLAST+1]
+        sma
+        jmp ilFault
+        lio ilRead
+        cla
+        scl 1s
+        div [5]
+        jmp ilFault
+        dac ibTrack
+        lai
+        add [1]
+        dac ibRecord
+        dzm ibModule
+        jsp ibRead
+        sza
+        jmp ilFault
+ilReadReturn,jmp .
+ilFault,lac ibCopyActive
+        sza
+        jmp ibCopyAbort
+        jmp error
+
+ilDest,0
+ilOffset,0
+ilSize,0
+ilBlock,0
+ilEntry,0
+ilNode,0
+ilInodeBlock,0
+ilFlags,0
+ilPtr,0
+ilResult,0;0;0;0;0;0
