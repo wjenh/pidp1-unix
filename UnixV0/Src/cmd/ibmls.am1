@@ -1,0 +1,145 @@
+ibmls
+// List dd or one of its directories. Directories end in / or !/.
+#include "unixsys.ah"
+        bank 2
+0/      jmp main
+0100/   SYSFRAME()
+0110/
+main,   lac i 07777
+        sad [4]
+        jmp root
+        sas [0d8]
+        jmp usage
+        lac 07777
+        add [5]
+        dac wanted
+root,   law 4
+        dac directory
+next,   lio directory
+        lac position
+        cal SYSIBMLIST
+        entry
+        sad [-5]
+        jmp denied
+        spa
+        jmp failed
+        sza i
+        jmp complete
+        idx position
+        lac entry
+        sza i
+        jmp next
+        lac wanted
+        sza
+        jmp match
+
+        law entry+1
+        dac namePtr
+        law line
+        dac linePtr
+        dac lineEnd
+        law i 4
+        dac count
+unpack,lac i namePtr
+        dac packed
+        sar 9s
+        and [0777]
+        jda character
+        lac packed
+        and [0777]
+        jda character
+        idx namePtr
+        isp count
+        jmp unpack
+        lac entry+5
+        sza i
+        jmp newline
+        sad [2]
+        jmp locked
+        jmp slash
+locked, law 041
+        dac i lineEnd
+        idx lineEnd
+slash,  law 057
+        dac i lineEnd
+        idx lineEnd
+newline,law 012
+        dac i lineEnd
+        lac lineEnd
+        sub [line-1]
+        dac lineCount
+        law 1
+        cal SYSWRITE
+        line
+lineCount,0
+        spa
+        cal SYSEXIT
+        jmp next
+
+// Keep embedded spaces and trim the padding after the last nonblank.
+character,0
+        dap charReturn
+        lac character
+        dac i linePtr
+        idx linePtr
+        lac character
+        sad [040]
+        jmp charReturn
+        lac linePtr
+        dac lineEnd
+charReturn,jmp .
+
+match,  law entry+1
+        dac namePtr
+        lac wanted
+        dac linePtr
+        law i 4
+        dac count
+compare,lac i namePtr
+        sas i linePtr
+        jmp next
+        idx namePtr
+        idx linePtr
+        isp count
+        jmp compare
+        dzm wanted
+        dzm position
+        lac entry
+        dac directory
+        jmp next
+
+complete,lac wanted
+        sza
+        jmp failed
+        cal SYSEXIT
+usage,  law 1
+        cal SYSWRITE
+        usageText; usageEnd-usageText
+        cal SYSEXIT
+denied, law 1
+        cal SYSWRITE
+        deniedText; deniedEnd-deniedText
+        cal SYSEXIT
+failed, law 1
+        cal SYSWRITE
+        errorText; errorEnd-errorText
+        cal SYSEXIT
+usageText, ascii "usage: ibmls [directory]\n"
+usageEnd,
+deniedText, ascii "ibmls: permission denied\n"
+deniedEnd,
+errorText, ascii "ibmls: directory or disk read failed\n"
+errorEnd,
+wanted,0
+directory,0
+position,0
+namePtr,0
+linePtr,0
+lineEnd,0
+count,0
+packed,0
+entry,0; 0; 0; 0; 0; 0
+line,
+        table 0d11,0
+constants
+start main

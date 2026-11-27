@@ -427,4 +427,7 @@ cs4,    lac csK
 ce1,    law HNOINIT
         jmp halt
 
-assert B1END <= 020000, "bank 1 holds the cache, the saved userdata and the rings"
+// DMA scratch in bank 1. The cold start clears this space with the rest
+// of the bank. The controller always writes it before software uses it.
+#define ibBuffer B1END
+assert ibBuffer+IBRECWORDS+1 <= 020000, "bank 1 also holds the IBM record buffer"

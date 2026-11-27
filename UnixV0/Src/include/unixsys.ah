@@ -44,6 +44,12 @@
 #define SYSSMES     033
 #define SYSRMES     034
 #define SYSFORK     035
+#define SYSIBMREAD  036             // IBM 1301 raw read, super-user only
+#define SYSIBMSAVE  037             // checked IBM text export to a new drum file
+#define SYSIBMLIST  040             // permission-checked IBM directory entry
+#define SYSIBMCOPY  041             // checked IBM file copy to the current drum directory
+#define IBRECWORDS  0d176
+#define IBTEXTWORDS (IBRECWORDS*4)
 
 // The frame.
 // cal stores AC at 0100 and runs 0101, which opens the window and jumps

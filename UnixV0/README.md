@@ -246,6 +246,96 @@ The images are `OUT/unix.drum`, `OUT/kernel/unix.rim` and `OUT/boot/boot.rim`.
 `Tools/v0fs/README.md` and `Tools/as7am1/README.md` the host tools.
 `Tools/as7` is the restorers' PDP-7 cross-assembler, which the B build uses.
 
+## Reading an IBM 1301 record
+
+This build adds a read-only IBM 1301 driver and the `ibmread` command. It
+requires the 1301 controller from pidp1-mods and a six-bit image assigned to
+that controller. Use a dedicated image with the default record layout. UNIX
+still boots from the Type 23 drum and uses it for its filesystem.
+
+At the UNIX prompt, logged in as the super-user:
+
+```text
+@ ibmread 0 123 4
+```
+
+The arguments are decimal module (0–9), track (0–9999), and record (1–5).
+The command prints 176 octal words, one per line. To save the listing
+safely, give the destination as a fourth argument:
+
+```text
+@ ibmread 0 123 4 testfile
+```
+
+This creates a new drum file in the current directory. The kernel checks
+for an unused inode and enough free blocks before creating the file. It
+allows eleven data blocks, one indirect block, and up to two directory
+blocks. An existing name or insufficient capacity returns an error with
+the directory unchanged. Ordinary shell `>` redirection opens the
+destination before the program starts, so use the fourth argument for a
+checked save.
+
+For a disposable test image, `dsk1301 make` creates the default record layout
+and `dsk1301 put` seeds a record with one byte per six-bit character. Stop
+using an image in the host tool before letting the guest read it.
+
+The kernel entry is `cal SYSIBMREAD` (octal 036), followed by the caller's
+buffer address. Pass the track in AC and `module * 8 + record` in IO. The
+buffer must hold 176 words in the caller's bank above the system call frame.
+The call returns AC zero on success or minus one on failure. On failure it
+leaves the caller's buffer intact. It requires a record of exactly 176
+words. The driver uses a one-second timeout across the seek and read. It
+issues no disk write or format orders.
+
+## Listing a UNIX V0 volume on the IBM disk
+
+`ibmls` lists the IBM volume's root directory (`dd`). Give it a directory
+name to list a directory directly under the root. Ordinary users can list
+directories they have read permission for. A readable directory ends in
+`/`, and an unreadable directory ends in `!/`:
+
+```text
+@ ibmls
+@ ibmls system
+@ ibmls ken
+```
+
+Use a V0 volume built for module zero. The host-side image builder checks an
+existing Type 23 UNIX image and copies its filesystem to a fresh IBM image
+with the default six-bit format:
+
+```sh
+python3 Tools/ibmvolume/ibmvolume.py unix.drum volume0 \
+    --v0fs /path/to/v0fs --dsk1301 /path/to/dsk1301
+```
+
+Set `ibm1301file` to the full path to `volume%d` to make that image available
+as module zero. Prepare the image offline, and use a separate image for
+the UNIX boot drum. Each 64-word filesystem block occupies the first 64
+words of a 176-word record. Block `b` is on decimal track `b // 5`, record
+`b % 5 + 1`. The image builder translates the drum's interleave as it copies
+the filesystem. `ibmls` reads direct and indirect directory blocks through
+the IBM driver. Regular `ls` continues to list files on the UNIX drum.
+
+### Copying a file from the IBM volume
+
+Use `ibmread path newfile` to copy a regular file to a new file in the
+current UNIX drum directory. The copy preserves the file's 18-bit words.
+The V0 shell allows eight characters per argument. For a longer path with
+one directory component, give the directory and filename separately:
+
+```text
+@ ibmread ken sys.rc testfile
+```
+
+The kernel checks read permission on the IBM directory and file and write
+permission on the destination directory. It checks for a free inode and
+enough data, indirect, and directory blocks before creating the file. An
+existing destination is preserved. If an IBM read fails during copying,
+UNIX removes the incomplete file. A directory such as `ken/dd` is listed
+with `ibmls` and cannot be copied as a regular file. The numeric record
+form of `ibmread` is available to the super-user.
+
 ## License
 
 The PDP-1 code is under the GNU General Public License, version 3, in `LICENSE`.

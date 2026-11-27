@@ -41,6 +41,8 @@ dd           drwr- 777777 4
         db       frwr- 777777 cmd/db.dmp 59
         dsw      frwr- 777777 cmd/dsw.dmp 40
         ed       frwr- 777777 cmd/ed.dmp 60
+        ibmread  fr-r- 777777 cmd/ibmread.dmp 80
+        ibmls    fr-r- 777777 cmd/ibmls.dmp 81
         init     frwr- 777777 cmd/init.dmp 41
         ln       frwr- 777777 cmd/ln.dmp 42
         link     l---- -1

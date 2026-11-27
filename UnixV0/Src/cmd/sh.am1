@@ -366,7 +366,7 @@ w_10406,idx 010
         lac i 010
 w_10407,sad u_newln
 w_10410,sma spa
-w_10411,jmp u_comerr
+w_10411,jmp inlineSlash
 w_10412,lai
 w_10413,dac w_10421
 w_10414,jda u_rline
@@ -375,6 +375,13 @@ w_10416,lia
 w_10417,lac u_space
 w_10420,jmp r_get
 w_10421,0000000
+// A slash followed by newline still continues the line. An embedded
+// slash is a literal argument character; return it and unread the peek.
+inlineSlash,lac 010
+        sub [1]
+        dac 010
+        lac u_slash
+        jmp r_get
 u_rline,0000000
         dap r_rline
         lac u_rline

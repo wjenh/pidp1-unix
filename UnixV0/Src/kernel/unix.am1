@@ -27,6 +27,8 @@ Unix kernel
 #include "dsp.ac"
 #include "chrono.ac"
 #include "s8.ac"
+#include "ibm1301.ac"
+#include "ibmlist.ac"
 #include <TYO/typetext.ac>
 
 constants

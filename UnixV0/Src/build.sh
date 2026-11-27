@@ -25,7 +25,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 TOOLS=$(cd "$HERE/../Tools" && pwd)
 AM1=${AM1:-/opt/pidp1-mods/bin/am1}
 AM1INC=${AM1INC:-/opt/pidp1-mods/Am1Includes}
-PROGS="init sh cat cp chmod chown chrm ln ls rm rn stat dsw pd date mv od ed roff nm un db as check salv st psych ttt p"
+PROGS="init sh cat cp chmod chown chrm ln ls rm rn stat dsw pd date mv od ed roff nm un db as check salv st psych ttt p ibmread ibmls"
 
 [ $# -eq 1 ] || { echo "usage: build.sh OUT"; exit 2; }
 [ -x "$AM1" ] || { echo "no am1 at $AM1: set AM1"; exit 2; }

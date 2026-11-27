@@ -155,8 +155,12 @@ sysTab, jmp sysSave         // 1 save
         jmp sysSmes         // 033 smes
         jmp sysRmes         // 034 rmes
         jmp sysFork         // 035 fork
+        jmp sysIBMRead      // 036 IBM 1301 raw read
+        jmp sysIBMSave      // 037 IBM record export to a new drum file
+        jmp sysIBMList      // 040 IBM directory entry
+        jmp sysIBMCopy      // 041 IBM file copy
 sysTabE,
-assert sysTabE-sysTab == 035, "1970 had 29 call numbers"
+assert sysTabE-sysTab == SYSIBMCOPY
 
 // sys intrp (s1.s:148-151).
 // Entry: AC = the new interrupt flag, nonzero to ignore the interrupt key.

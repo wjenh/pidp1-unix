@@ -1,0 +1,427 @@
+// Read-only access to a dedicated, six-bit IBM 1301 image.
+// sys 036; buffer. AC: decimal track 0..9999. IO: module*8 + record (1..5).
+// Return AC=0 and 176 words in the caller's buffer, or -1 leaving it alone.
+#include <IBM1301/ibm1301defs.ah>
+
+sysIBMRead,
+        jda arg
+        dac ibUser
+        and [07777]
+        sas ibUser
+        jmp error
+        sub [0110]
+        spa
+        jmp error
+        lac ibUser
+        sub [010000-IBRECWORDS+1]
+        sma
+        jmp error
+        lac uUid
+        sma
+        jmp error
+        lac ibUser
+        jda uptr
+        dac ibUser
+        lac uMq
+        and [7]
+        dac ibRecord
+        sza i
+        jmp error
+        sub [6]
+        sma
+        jmp error
+        lac uMq
+        and [0777600]
+        sza
+        jmp error
+        lac uMq
+        sar 3s
+        dac ibModule
+        sub [0d10]
+        sma
+        jmp error
+        lac uAc
+        spa
+        jmp error
+        sub [0d10000]
+        sma
+        jmp error
+        lac uAc
+        dac ibTrack
+        jsp ibRead
+        sza
+        jmp error
+        lac [ibBuffer]
+        dac cpSrc
+        lac ibUser
+        dac cpDst
+        law IBRECWORDS
+        jda copy
+        jmp okexit
+
+// S_DEN reports and acknowledges all latched signals. This driver owns the
+// adapter while the call is in progress. Keep UNIX's clock and breaks running.
+ibRead, dap ibReadReturn
+        cli
+        S_DEN
+        lai
+        and [S_ABUSY+S_ASIX]
+        sas [S_ASIX]
+        jmp ibError
+        rck
+        dio ibStart
+
+        // Convert the four track digits to the packed order in S_ORDER.
+        lac ibTrack
+        dac ibQuotient
+        jsp ibDigit
+        sal 6s
+        dac ibOrder+2
+        jsp ibDigit
+        sal 9s
+        sal 3s
+        ior ibOrder+2
+        dac ibOrder+2
+        jsp ibDigit
+        dac ibOrder+1
+        jsp ibDigit
+        sal 6s
+        ior ibOrder+1
+        dac ibOrder+1
+        lac ibModule
+        sal 9s
+        sal 3s
+        ior ibOrder+1
+        dac ibOrder+1
+        dzm ibOrder+3
+        lac [S_DSEK << 6]
+        jda ibControl
+        lac ibStatus
+        and [S_AATTN]
+        sza
+        jmp ibSelect
+        lac [S_AATTN]
+        jda ibWait
+ibSelect,
+        lac ibRecord
+        sal 9s
+        sal 3s
+        dac ibOrder+3
+        lac [S_DVSR << 6]
+        jda ibControl
+        lio [ibBuffer]
+        S_SID
+        lio [IBRECWORDS+1]  // detect a record longer than the nominal size
+        S_SWD
+        S_DRD
+        jsp ibFinish
+        S_RLD
+        lai
+        sas [ibBuffer+IBRECWORDS]
+        jmp ibError
+        cla
+ibReadReturn,jmp .
+
+ibDigit,dap ibDigitReturn
+        lio ibQuotient
+        cla
+        scl 1s
+        div [0d10]
+        jmp ibError
+        dac ibQuotient
+        lai
+ibDigitReturn,jmp .
+
+ibControl,0
+        dap ibControlReturn
+        lac ibControl
+        dac ibOrder
+        lio [ibOrder]
+        S_SID
+        lio [4]
+        S_SWD
+        S_DCT
+        jsp ibFinish
+ibControlReturn,jmp .
+
+ibFinish,dap ibFinishReturn
+        lai
+        and [S_AREFUSED]
+        sza
+        jmp ibError
+        lac [S_AEND]
+        jda ibWait
+ibFinishReturn,jmp .
+
+ibWait,0
+        dap ibWaitReturn
+        lac ibWait
+        dac ibMask
+ibPoll, cli
+        S_DEN
+        dio ibStatus
+        lai
+        and [S_AUEND]
+        sza
+        jmp ibError
+        lac ibStatus
+        and ibMask
+        sza i
+        jmp ibDeadline
+ibWaitReturn,jmp .
+ibDeadline,
+        rck
+        lai
+        sub ibStart
+        spa
+        add [CLKWRAP]
+        sub [0d1000]
+        spa
+        jmp ibPoll
+        S_DRS
+ibError,law i 1
+        jmp ibReadReturn
+
+ibUser,0
+ibTrack,0
+ibModule,0
+ibRecord,0
+ibStart,0
+ibStatus,0
+ibMask,0
+ibQuotient,0
+ibOrder,0; 0; 0; 0
+
+// Save one already formatted record to a new file in the current directory.
+// One kernel call owns the filesystem from preflight through the final write.
+// Allow 11 text blocks, one indirect block and up to two directory blocks.
+#define IBNEEDED ((IBTEXTWORDS+BLKW-1)/BLKW+1+2)
+sysIBMSave,
+        jsp ibGetName
+        lac uUid
+        sma
+        jmp error
+        lac uAc
+        and [07777]
+        sas uAc
+        jmp error
+        sub [BANKW-IBTEXTWORDS+1]
+        sma
+        jmp error
+        lac uAc
+        jda uptr
+        dac ibText
+        law IBNEEDED
+        dac ibNeed
+        jsp ibMakeFile
+        lac ibText
+        dac rwBase
+        lac [IBTEXTWORDS]
+        dac rwCount
+        cla
+        jda iwrite
+        jda iput
+        jmp okexit
+
+ibGetName,dap ibNameReturn
+        jda arg
+        dac ibName
+        and [07777]
+        sas ibName
+        jmp error
+        sub [BANKW-NAMEW+1]
+        sma
+        jmp error
+ibNameReturn,jmp .
+
+ibMakeFile,dap ibMakeReturn
+        lac ibName
+        jda uptr
+        dac cpSrc
+        lac [name]
+        dac cpDst
+        law NAMEW
+        jda copy
+        lac name
+        sad [040040]
+        jmp error
+        lac [name]
+        dac nmPtr
+        lac uCdir
+        jda namei
+        jmp ibNew
+        law i 2
+        jmp ibSaveError
+ibNew,  lac iFlags
+        and [IDIR]
+        sza i
+        jmp error
+        law FWRITE
+        dac mode
+        jda access
+        lac iSize
+        sub [MAXSIZE-DIRSZ+1]
+        sma
+        jmp ibNoRoom
+        jsp ibDiskSpace
+        law FIRSTINUM-1
+        dac ibInum
+ibFindInode,
+        idx ibInum
+        sad [NINODE]
+        jmp ibNoRoom
+        jda iget
+        lac iFlags
+        spa
+        jmp ibFindInode
+        lac uCdir
+        jda iget
+        law 014
+        jda icreat
+ibMakeReturn,jmp .
+
+// Each free-list chain node contributes ten blocks. Stop once enough room
+// is confirmed. dskget leaves the loaded directory and system block alone.
+ibDiskSpace,dap ibSpaceReturn
+        lac sNfblks
+        dac ibFree
+        lac sNxfblk
+        dac ibChain
+ibMore, lac ibFree
+        sub ibNeed
+        spa
+        jmp ibFollow
+ibSpaceReturn,jmp .
+ibFollow,
+        lac ibChain
+        sub [0d52]
+        spa
+        jmp ibNoRoom
+        lac ibChain
+        sub [FSLAST+1]
+        sma
+        jmp ibNoRoom
+        lac ibChain
+        jda dskget
+        dac ibFreePtr
+        lac i ibFreePtr
+        dac ibChain
+        lac ibFree
+        add [NFBLKS]
+        dac ibFree
+        jmp ibMore
+ibNoRoom,law i 3
+ibSaveError,dac uAc
+        jmp sysexit
+
+ibNeed,0
+ibName,0
+ibText,0
+ibInum,0
+ibFree,0
+ibChain,0
+ibFreePtr,0
+#undef IBNEEDED
+
+// Copy one IBM regular file without exposing unrelated blocks to the caller.
+sysIBMCopy,
+        jsp ibGetName
+        jsp ilResolve
+        sza i
+        jmp error
+        lac ilResult
+        sza i
+        jmp error
+        dac ibSource
+        lac ilFlags
+        and [IDIR]
+        sza i
+        jmp ibRegular
+        law i 4
+        jmp ibSaveError
+ibRegular,
+        lac ilFlags
+        and [IUSED+ISPEC]
+        sas [IUSED]
+        jmp error
+        jsp ilReadable
+        sza i
+        jmp ibSourceDenied
+        lac ilNode
+        add [0d10]
+        dac ilPtr
+        lac i ilPtr
+        dac ibRemaining
+        spa
+        jmp error
+        sub [MAXSIZE]
+        sma sza
+        jmp error
+        lac ibRemaining
+        add [BLKW-1]
+        sar 6s
+        dac ibNeed
+        sub [NDSKPS]
+        sma sza
+        jmp ibIndirectCost
+        jmp ibDirectoryCost
+ibIndirectCost,
+        lac ibNeed
+        add [BLKW-1]
+        sar 6s
+        add ibNeed
+        dac ibNeed
+ibDirectoryCost,
+        idx ibNeed
+        idx ibNeed
+        jsp ibMakeFile
+        dzm ilOffset
+        law 1
+        dac ibCopyActive
+ibCopyLoop,
+        lac ibRemaining
+        sza i
+        jmp ibCopyDone
+        lac ibSource
+        jda ilInode
+        jsp ilLocate
+        lac [ibBuffer]
+        dac rwBase
+        lac ibRemaining
+        sub [BLKW]
+        sma
+        jmp ibCopyBlock
+        lac ibRemaining
+        jmp ibCopyCount
+ibCopyBlock,law BLKW
+ibCopyCount,dac rwCount
+        lac ilOffset
+        jda iwrite
+        sas rwCount
+        jmp ibCopyAbort
+        jda iput
+        lac ilOffset
+        add rwCount
+        dac ilOffset
+        lac ibRemaining
+        sub rwCount
+        dac ibRemaining
+        jmp ibCopyLoop
+ibCopyDone,dzm ibCopyActive
+        jmp okexit
+ibSourceDenied,law i 5
+        jmp ibSaveError
+
+// No other syscall can run while this one has the new directory entry.
+ibCopyAbort,
+        dzm ibCopyActive
+        dzm dI
+        jda dput
+        jda itrunc
+        dzm iFlags
+        jda iput
+        jmp error
+
+ibCopyActive,0
+ibRemaining,0
+ibSource,0
